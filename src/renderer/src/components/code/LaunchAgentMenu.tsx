@@ -1,10 +1,9 @@
-import * as RMenu from '@radix-ui/react-dropdown-menu'
-import { ChevronDown, ChevronRight, RefreshCw, Sparkles } from 'lucide-react'
+import { ChevronDown, RefreshCw, Sparkles } from 'lucide-react'
 import { SYSTEM_ACCOUNT_ID, type DetectedAgent } from '@shared/types'
 import { resolveAccountName } from '../../lib/accounts'
 import { openTerminal } from '../../lib/canvas'
 import { refreshAgents, toast, useApp } from '../../lib/store'
-import { AgentIcon, Button, Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger } from '../ui'
+import { AgentIcon, Button, Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger } from '../ui'
 
 function AgentItem({ agent, workspaceId }: { agent: DetectedAgent; workspaceId: string }) {
   const allAccounts = useApp((s) => s.snapshot!.accounts)
@@ -29,29 +28,25 @@ function AgentItem({ agent, workspaceId }: { agent: DetectedAgent; workspaceId: 
     )
   }
   return (
-    <RMenu.Sub>
-      <RMenu.SubTrigger className="flex h-8 cursor-default select-none items-center gap-2 rounded-md px-2 text-fg outline-none data-[highlighted]:bg-hover data-[state=open]:bg-hover">
+    <MenuSub>
+      <MenuSubTrigger hint={defaultName}>
         <AgentIcon agentId={agent.id} size={13} />
-        <span className="flex-1">{agent.label}</span>
-        <span className="text-xs text-fg-faint">{defaultName}</span>
-        <ChevronRight size={13} className="text-fg-faint" />
-      </RMenu.SubTrigger>
-      <RMenu.Portal>
-        <RMenu.SubContent sideOffset={6} className="z-50 min-w-[200px] rounded-lg border border-line-strong bg-raised p-1 text-sm shadow-[0_12px_32px_rgba(0,0,0,0.55)]">
-          <MenuLabel>Run on account</MenuLabel>
-          <MenuItem onSelect={() => launch()} hint="default">
-            {defaultName}
+        {agent.label}
+      </MenuSubTrigger>
+      <MenuSubContent>
+        <MenuLabel>Run on account</MenuLabel>
+        <MenuItem onSelect={() => launch()} hint="default">
+          {defaultName}
+        </MenuItem>
+        <MenuSeparator />
+        <MenuItem onSelect={() => launch(SYSTEM_ACCOUNT_ID)}>System login</MenuItem>
+        {accounts.map((a) => (
+          <MenuItem key={a.id} onSelect={() => launch(a.id)}>
+            {a.name}
           </MenuItem>
-          <MenuSeparator />
-          <MenuItem onSelect={() => launch(SYSTEM_ACCOUNT_ID)}>System login</MenuItem>
-          {accounts.map((a) => (
-            <MenuItem key={a.id} onSelect={() => launch(a.id)}>
-              {a.name}
-            </MenuItem>
-          ))}
-        </RMenu.SubContent>
-      </RMenu.Portal>
-    </RMenu.Sub>
+        ))}
+      </MenuSubContent>
+    </MenuSub>
   )
 }
 

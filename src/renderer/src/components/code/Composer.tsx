@@ -110,7 +110,7 @@ export function Composer() {
             aria-label="Send"
             onClick={send}
             disabled={!text.trim()}
-            className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent-solid text-white transition-colors hover:bg-accent disabled:bg-hover disabled:text-fg-faint"
+            className="flex h-8 w-8 items-center justify-center rounded-[9px] border border-[#1d4ed8] bg-linear-to-b from-[#4c8df6] to-[#2563eb] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.28),0_1px_2px_rgba(0,0,0,0.45)] transition-all hover:from-[#5d9bff] hover:to-[#3071f0] active:translate-y-px disabled:border-line-strong disabled:from-hover disabled:to-hover disabled:text-fg-faint disabled:shadow-none"
           >
             <ArrowUp size={15} strokeWidth={2.5} />
           </button>

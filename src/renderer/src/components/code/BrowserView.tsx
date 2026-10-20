@@ -1,6 +1,6 @@
 import { ArrowLeft, ArrowRight, ExternalLink, Globe, Maximize2, RotateCw } from 'lucide-react'
 import { useEffect, useRef, useState, type FormEvent } from 'react'
-import { IconButton } from '../ui'
+import { Button, IconButton } from '../ui'
 
 interface WebviewEl extends HTMLElement {
   loadURL(url: string): Promise<void>
@@ -121,9 +121,9 @@ export function BrowserView({
               <br />
               Start your app (for example ask your agent to “run the dev server”), then press Reload.
             </div>
-            <button className="mt-2 rounded-md border border-line-strong bg-raised px-3 py-1.5 text-xs text-fg hover:bg-hover" onClick={() => ref.current?.reload()}>
+            <Button size="sm" className="mt-2" onClick={() => ref.current?.reload()}>
               Reload
-            </button>
+            </Button>
           </div>
         )}
       </div>

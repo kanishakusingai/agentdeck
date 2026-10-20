@@ -1,30 +1,37 @@
 import * as RDialog from '@radix-ui/react-dialog'
 import * as RMenu from '@radix-ui/react-dropdown-menu'
+import * as RSelect from '@radix-ui/react-select'
 import * as RTooltip from '@radix-ui/react-tooltip'
 import { cva, type VariantProps } from 'class-variance-authority'
-import { Aperture, Asterisk, Atom, Bot, Boxes, CodeXml, Feather, Moon, MousePointer2, Orbit, Sparkle, SquareTerminal, X, Zap } from 'lucide-react'
-import { forwardRef, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from 'react'
+import { Aperture, Asterisk, Atom, Bot, Boxes, Check, ChevronDown, CodeXml, Feather, Moon, MousePointer2, Orbit, Sparkle, SquareTerminal, X, Zap } from 'lucide-react'
+import { Children, forwardRef, isValidElement, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactElement, type ReactNode, type TextareaHTMLAttributes } from 'react'
 import type { PaneStatus } from '@shared/types'
 import type { Activity } from '../lib/activity'
 import { cn } from '../lib/cn'
 
 // ---------- Button ----------
+// Call-to-action style: a soft top-to-bottom gradient, a crisp 1px border in a
+// deeper shade, a bright inner top edge and a small drop shadow, so buttons look
+// pressable. Blue for the main action, white for the second one.
 
 const button = cva(
-  'inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-md font-medium transition-colors disabled:pointer-events-none disabled:opacity-45 no-drag',
+  'inline-flex items-center justify-center gap-1.5 whitespace-nowrap font-medium tracking-[-0.005em] transition-[background,box-shadow,border-color,color,transform] duration-150 active:translate-y-px disabled:pointer-events-none disabled:opacity-45 no-drag',
   {
     variants: {
       variant: {
-        primary: 'bg-accent-solid text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.14)] hover:bg-accent',
-        secondary: 'bg-raised text-fg border border-line-strong hover:bg-hover',
-        ghost: 'text-fg-muted hover:text-fg hover:bg-hover',
-        danger: 'bg-err/12 text-err border border-err/30 hover:bg-err/20'
+        primary:
+          'border border-[#1d4ed8] bg-linear-to-b from-[#4c8df6] to-[#2563eb] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.28),0_1px_2px_rgba(0,0,0,0.45),0_0_0_1px_rgba(37,99,235,0.15)] hover:from-[#5d9bff] hover:to-[#3071f0] active:from-[#2f6fe8] active:to-[#2563eb]',
+        secondary:
+          'border border-[#d4d4d8] bg-linear-to-b from-white to-[#ececef] text-[#18181b] shadow-[inset_0_1px_0_#ffffff,0_1px_2px_rgba(0,0,0,0.4)] hover:to-[#e2e2e6] active:from-[#f1f1f3] active:to-[#e4e4e7]',
+        ghost: 'rounded-md text-fg-muted hover:bg-hover hover:text-fg active:translate-y-0',
+        danger:
+          'border border-[#b91c1c] bg-linear-to-b from-[#f05252] to-[#dc2626] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.25),0_1px_2px_rgba(0,0,0,0.45)] hover:from-[#f56565] hover:to-[#e02d2d]'
       },
       size: {
-        sm: 'h-7 px-2.5 text-xs',
-        md: 'h-8 px-3 text-sm',
-        lg: 'h-10 px-4 text-sm',
-        icon: 'h-7 w-7 text-fg-muted hover:text-fg'
+        sm: 'h-8 rounded-[9px] px-3 text-xs',
+        md: 'h-9 rounded-[10px] px-4 text-[13px]',
+        lg: 'h-11 rounded-xl px-5 text-sm',
+        icon: 'h-7 w-7 rounded-md text-fg-muted hover:text-fg'
       }
     },
     defaultVariants: { variant: 'secondary', size: 'md' }
@@ -79,10 +86,10 @@ IconButton.displayName = 'IconButton'
 // ---------- Form controls ----------
 
 const field =
-  'w-full rounded-md border border-line-strong bg-surface px-2.5 text-sm text-fg placeholder:text-fg-faint focus:border-accent focus:outline-none'
+  'w-full rounded-[10px] border border-line-strong bg-surface px-3 text-sm text-fg shadow-[inset_0_1px_2px_rgba(0,0,0,0.25)] placeholder:text-fg-faint focus:border-accent focus:outline-none focus:ring-3 focus:ring-accent/20'
 
 export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement>>(({ className, ...props }, ref) => (
-  <input ref={ref} className={cn(field, 'h-8', className)} {...props} />
+  <input ref={ref} className={cn(field, 'h-9', className)} {...props} />
 ))
 Input.displayName = 'Input'
 
@@ -91,10 +98,76 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttributes<H
 ))
 Textarea.displayName = 'Textarea'
 
-export const Select = forwardRef<HTMLSelectElement, SelectHTMLAttributes<HTMLSelectElement>>(({ className, ...props }, ref) => (
-  <select ref={ref} className={cn(field, 'h-8 cursor-pointer pr-7', className)} {...props} />
-))
-Select.displayName = 'Select'
+// ---------- Select (dropdown) ----------
+// Same call style as a native <select> with <option> children, but drawn by the
+// app so the open list matches the menus instead of Windows' grey system list.
+
+interface OptionProps {
+  value?: string | number
+  disabled?: boolean
+  children?: ReactNode
+}
+
+/** Radix reserves "" for "nothing chosen", so empty values travel under a stand-in. */
+const EMPTY = '__agentdeck_empty__'
+const encode = (v: string | number | readonly string[] | undefined): string => (v === undefined || v === '' ? EMPTY : String(v))
+const decode = (v: string): string => (v === EMPTY ? '' : v)
+
+function collectOptions(children: ReactNode, out: OptionProps[] = []): OptionProps[] {
+  Children.forEach(children, (child) => {
+    if (!isValidElement(child)) return
+    const el = child as ReactElement<OptionProps & { children?: ReactNode }>
+    if (el.type === 'option') out.push(el.props)
+    else if (el.props.children) collectOptions(el.props.children, out)
+  })
+  return out
+}
+
+export interface SelectProps {
+  value?: string | number
+  onChange?: (e: { target: { value: string } }) => void
+  children?: ReactNode
+  className?: string
+  disabled?: boolean
+  'aria-label'?: string
+}
+
+export function Select({ value, onChange, children, className, disabled, 'aria-label': ariaLabel }: SelectProps) {
+  const options = collectOptions(children)
+  return (
+    <RSelect.Root value={encode(value)} onValueChange={(v) => onChange?.({ target: { value: decode(v) } })} disabled={disabled}>
+      <RSelect.Trigger
+        aria-label={ariaLabel}
+        className={cn(
+          field,
+          'group flex h-9 cursor-pointer items-center justify-between gap-2 text-left hover:border-fg-faint/60 data-[state=open]:border-accent data-[state=open]:ring-3 data-[state=open]:ring-accent/20',
+          className
+        )}
+      >
+        <span className="min-w-0 truncate">
+          <RSelect.Value />
+        </span>
+        <RSelect.Icon className="shrink-0 text-fg-faint transition-transform group-data-[state=open]:rotate-180">
+          <ChevronDown size={14} />
+        </RSelect.Icon>
+      </RSelect.Trigger>
+      <RSelect.Portal>
+        <RSelect.Content position="popper" sideOffset={6} className={cn(menuSurface, 'max-h-[min(320px,var(--radix-select-content-available-height))] min-w-[var(--radix-select-trigger-width)]')}>
+          <RSelect.Viewport>
+            {options.map((o) => (
+              <RSelect.Item key={encode(o.value)} value={encode(o.value)} disabled={o.disabled} className={cn(menuItem, 'pr-8')}>
+                <RSelect.ItemText>{o.children}</RSelect.ItemText>
+                <RSelect.ItemIndicator className="absolute right-2.5 flex items-center">
+                  <Check size={14} strokeWidth={2.5} />
+                </RSelect.ItemIndicator>
+              </RSelect.Item>
+            ))}
+          </RSelect.Viewport>
+        </RSelect.Content>
+      </RSelect.Portal>
+    </RSelect.Root>
+  )
+}
 
 export function Field({ label, hint, children }: { label: string; hint?: ReactNode; children: ReactNode }) {
   return (
@@ -268,22 +341,27 @@ export function Dialog({
   )
 }
 
-// ---------- Menu ----------
+// ---------- Menu (dropdown) ----------
+// One look for every dropdown: a raised, slightly glassy panel with a soft
+// shadow that fades/scales in from its button; the item under the pointer
+// lights up in solid blue with white text.
+
+/** The floating panel of every dropdown menu and select. */
+export const menuSurface =
+  'menu-pop z-50 min-w-[220px] overflow-hidden rounded-xl border border-white/[0.09] bg-[#141417]/95 p-1.5 text-[13px] text-fg shadow-[0_18px_50px_-8px_rgba(0,0,0,0.75),0_2px_6px_rgba(0,0,0,0.4),inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-xl'
+
+/** A row inside a dropdown. */
+export const menuItem =
+  'relative flex h-8 cursor-default select-none items-center gap-2.5 rounded-lg px-2.5 outline-none transition-colors duration-75 data-[disabled]:pointer-events-none data-[disabled]:opacity-40 data-[highlighted]:bg-linear-to-b data-[highlighted]:from-[#3b82f6] data-[highlighted]:to-[#2563eb] data-[highlighted]:text-white data-[highlighted]:shadow-[inset_0_1px_0_rgba(255,255,255,0.18)] data-[state=open]:bg-hover data-[highlighted]:[&_svg]:text-white! data-[highlighted]:[&_.menu-hint]:text-white/75'
 
 export const Menu = RMenu.Root
 export const MenuTrigger = RMenu.Trigger
+export const MenuSub = RMenu.Sub
 
 export function MenuContent({ children, align = 'start', className }: { children: ReactNode; align?: 'start' | 'end' | 'center'; className?: string }) {
   return (
     <RMenu.Portal>
-      <RMenu.Content
-        align={align}
-        sideOffset={6}
-        className={cn(
-          'z-50 min-w-[220px] rounded-lg border border-line-strong bg-raised p-1 text-sm shadow-[0_12px_32px_rgba(0,0,0,0.55)]',
-          className
-        )}
-      >
+      <RMenu.Content align={align} sideOffset={6} collisionPadding={8} className={cn(menuSurface, className)}>
         {children}
       </RMenu.Content>
     </RMenu.Portal>
@@ -307,21 +385,39 @@ export function MenuItem({
     <RMenu.Item
       disabled={disabled}
       onSelect={onSelect}
-      className={cn(
-        'flex h-8 cursor-default select-none items-center gap-2 rounded-md px-2 outline-none data-[disabled]:opacity-40 data-[highlighted]:bg-hover',
-        danger ? 'text-err' : 'text-fg'
-      )}
+      className={cn(menuItem, danger && 'text-err data-[highlighted]:from-[#ef4444] data-[highlighted]:to-[#dc2626]')}
     >
-      <span className="flex min-w-0 flex-1 items-center gap-2">{children}</span>
-      {hint && <span className="text-xs text-fg-faint">{hint}</span>}
+      <span className="flex min-w-0 flex-1 items-center gap-2.5">{children}</span>
+      {hint && <span className="menu-hint shrink-0 text-xs text-fg-faint">{hint}</span>}
     </RMenu.Item>
   )
 }
 
+/** A row that opens a side menu (e.g. pick an account). */
+export function MenuSubTrigger({ children, hint }: { children: ReactNode; hint?: ReactNode }) {
+  return (
+    <RMenu.SubTrigger className={menuItem}>
+      <span className="flex min-w-0 flex-1 items-center gap-2.5">{children}</span>
+      {hint && <span className="menu-hint shrink-0 text-xs text-fg-faint">{hint}</span>}
+      <ChevronDown size={13} className="-rotate-90 text-fg-faint" />
+    </RMenu.SubTrigger>
+  )
+}
+
+export function MenuSubContent({ children }: { children: ReactNode }) {
+  return (
+    <RMenu.Portal>
+      <RMenu.SubContent sideOffset={8} alignOffset={-6} collisionPadding={8} className={cn(menuSurface, 'min-w-[200px]')}>
+        {children}
+      </RMenu.SubContent>
+    </RMenu.Portal>
+  )
+}
+
 export function MenuLabel({ children }: { children: ReactNode }) {
-  return <RMenu.Label className="px-2 pb-1 pt-2 text-2xs font-semibold uppercase tracking-[0.06em] text-fg-faint">{children}</RMenu.Label>
+  return <RMenu.Label className="px-2.5 pb-1.5 pt-2 text-2xs font-semibold uppercase tracking-[0.07em] text-fg-faint">{children}</RMenu.Label>
 }
 
 export function MenuSeparator() {
-  return <RMenu.Separator className="my-1 h-px bg-line" />
+  return <RMenu.Separator className="-mx-1.5 my-1.5 h-px bg-white/[0.07]" />
 }
