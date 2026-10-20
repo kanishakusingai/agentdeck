@@ -1,4 +1,5 @@
 import { app, BrowserWindow, dialog, ipcMain, session, shell, type WebContents } from 'electron'
+import { mkdirSync } from 'fs'
 import { join } from 'path'
 import type { InvokeChannels, SendChannels } from '@shared/api'
 import { AppCore } from './core'
@@ -6,7 +7,7 @@ import { AppCore } from './core'
 // Tests run against a throwaway data folder.
 if (process.env.AGENTDECK_USER_DATA) app.setPath('userData', process.env.AGENTDECK_USER_DATA)
 
-const BG = '#0b0d10'
+const BG = '#08080a'
 const BROWSER_PARTITION = 'persist:agentdeck-browser'
 let mainWindow: BrowserWindow | null = null
 let core: AppCore
@@ -42,10 +43,10 @@ function createWindow(): void {
     backgroundColor: BG,
     title: 'AgentDeck',
     icon: join(__dirname, '../../resources/icon.png'),
+    // The app draws its own window buttons (close / minimise / maximise) in the title bar.
+    // macOS keeps its native traffic lights.
     titleBarStyle: 'hidden',
-    ...(process.platform !== 'darwin'
-      ? { titleBarOverlay: { color: BG, symbolColor: '#9aa3ad', height: 40 } }
-      : { trafficLightPosition: { x: 14, y: 13 } }),
+    ...(process.platform === 'darwin' ? { trafficLightPosition: { x: 16, y: 16 } } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
@@ -57,6 +58,8 @@ function createWindow(): void {
   })
 
   mainWindow.on('ready-to-show', () => mainWindow?.show())
+  mainWindow.on('maximize', () => send('window:maximized', true))
+  mainWindow.on('unmaximize', () => send('window:maximized', false))
   hardenWebContents(mainWindow.webContents)
 
   // The app itself never navigates away from its own page.
@@ -132,6 +135,14 @@ function registerIpc(): void {
     const folder = await pickFolder()
     return folder ? core.addWorkspace(folder) : null
   })
+  handle('workspaces:addScratch', () => {
+    // Tests keep the scratch folder inside their throwaway data folder.
+    const dir = process.env.AGENTDECK_USER_DATA
+      ? join(app.getPath('userData'), 'Scratchpad')
+      : join(app.getPath('documents'), 'AgentDeck', 'Scratchpad')
+    mkdirSync(dir, { recursive: true })
+    return core.addWorkspace(dir, 'Scratchpad')
+  })
   handle('workspaces:rename', (id, name) => core.renameWorkspace(id, name))
   handle('workspaces:remove', (id) => core.removeWorkspace(id))
   handle('workspaces:setAccountOverride', (id, p, a) => core.setAccountOverride(id, p, a))
@@ -174,6 +185,15 @@ function registerIpc(): void {
   handle('limits:dismiss', (id) => core.dismissLimit(id))
 
   handle('voice:enhance', (text) => core.enhancePrompt(String(text ?? '')))
+
+  handle('window:minimize', () => mainWindow?.minimize())
+  handle('window:toggleMaximize', () => {
+    if (!mainWindow) return
+    if (mainWindow.isMaximized()) mainWindow.unmaximize()
+    else mainWindow.maximize()
+  })
+  handle('window:close', () => mainWindow?.close())
+  handle('window:isMaximized', () => mainWindow?.isMaximized() ?? false)
 }
 
 if (!app.requestSingleInstanceLock()) {

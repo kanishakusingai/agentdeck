@@ -31,6 +31,7 @@ const api = {
   },
   workspaces: {
     add: call('workspaces:add'),
+    addScratch: call('workspaces:addScratch'),
     rename: call('workspaces:rename'),
     remove: call('workspaces:remove'),
     setAccountOverride: call('workspaces:setAccountOverride'),
@@ -79,6 +80,13 @@ const api = {
   },
   voice: {
     enhance: call('voice:enhance')
+  },
+  window: {
+    minimize: call('window:minimize'),
+    toggleMaximize: call('window:toggleMaximize'),
+    close: call('window:close'),
+    isMaximized: call('window:isMaximized'),
+    onMaximized: on('window:maximized')
   }
 } satisfies AgentDeckApi
 

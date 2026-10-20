@@ -73,6 +73,7 @@ function patchUi(patch: Partial<UiState>): void {
 export const setMode = (mode: Mode): void => patchUi({ mode })
 export const setActiveWorkspace = (activeWorkspaceId: string | undefined): void => patchUi({ activeWorkspaceId })
 export const toggleSidebar = (open?: boolean): void => patchUi({ sidebarOpen: open ?? !ui().sidebarOpen })
+export const toggleRail = (open?: boolean): void => patchUi({ railOpen: open ?? !ui().railOpen })
 export const setSidebarTab = (sidebarTab: SidebarTab): void => patchUi({ sidebarTab, sidebarOpen: true })
 
 export async function saveSettings(patch: Partial<Settings>): Promise<void> {

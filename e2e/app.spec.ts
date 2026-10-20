@@ -31,12 +31,14 @@ async function launch(): Promise<{ app: ElectronApplication; page: Page }> {
 const shot = (page: Page, name: string) => page.screenshot({ path: join(shots, `${name}.png`) })
 
 test('the whole app: workspaces, terminals, layout, modes, persistence', async () => {
+  test.setTimeout(150_000)
   let { app, page } = await launch()
 
   // 1. A dark window with the title bar and mode switch
   await expect(page.getByText('AgentDeck').first()).toBeVisible()
   await expect(page.getByRole('tab', { name: 'Code' })).toHaveAttribute('aria-selected', 'true')
-  await expect(page.getByText('Add your first workspace')).toBeVisible()
+  await expect(page.getByText('Welcome to AgentDeck')).toBeVisible()
+  await expect(page.getByTestId('continue-without-folder')).toBeVisible()
   await shot(page, '01-empty')
 
   // 2. Add a workspace (folder picker stubbed for tests)
@@ -83,7 +85,7 @@ test('the whole app: workspaces, terminals, layout, modes, persistence', async (
   await expect(page.getByText('Usage limit reached.', { exact: true })).toBeVisible({ timeout: 15000 })
   await expect(page.getByRole('button', { name: /Resume when it resets/ })).toBeVisible()
   await expect(page.getByRole('button', { name: /Continue on another account/ })).toBeVisible()
-  await expect(page.getByText('Need attention').locator('..')).toContainText('1')
+  await expect(page.getByTestId('stat-needs')).toContainText('1')
   await shot(page, '04b-usage-limit')
   await page.getByRole('button', { name: 'Dismiss' }).click()
   await expect(page.getByText('Usage limit reached.', { exact: true })).toBeHidden()
@@ -140,5 +142,15 @@ test('the whole app: workspaces, terminals, layout, modes, persistence', async (
   await expect(page.getByTestId('workspace-row')).toHaveCount(1)
   // The saved layout comes back with fresh shells in each pane
   await expect(page.getByTestId('pane-tab')).toHaveCount(3)
+  // Restored panes belong to their workspace (and start in its folder)
+  await expect(page.getByTestId('dashboard-row').first()).toContainText('agentdeck-e2e-site-')
+
+  // 13. Continue without a folder: a scratch workspace is added and opened
+  await page.getByTestId('add-workspace').click()
+  await page.getByRole('menuitem', { name: /Continue without a folder/ }).click()
+  await expect(page.getByTestId('workspace-row')).toHaveCount(2)
+  await expect(page.getByTestId('workspace-row').filter({ hasText: 'Scratchpad' })).toBeVisible()
+  await expect(page.getByText('No panes open').locator('visible=true').first()).toBeVisible()
+  await shot(page, '10-scratchpad')
   await app.close()
 })

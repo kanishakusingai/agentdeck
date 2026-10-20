@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { activeTerminalPtyId } from '../lib/canvas'
+import { writePty } from '../lib/pty-bus'
 import { settings, toast } from '../lib/store'
 import { initialPtt, pttReducer, type PttEvent, type PttState } from './ptt'
 
@@ -158,7 +159,7 @@ function insertIntoField(el: HTMLInputElement | HTMLTextAreaElement, text: strin
 export function insertText(text: string, el: Element | null): void {
   const pane = el?.closest('[data-pty-id]')
   if (pane) {
-    window.api.pty.write(pane.getAttribute('data-pty-id')!, text)
+    writePty(pane.getAttribute('data-pty-id')!, text)
     return
   }
   if (el instanceof HTMLTextAreaElement || (el instanceof HTMLInputElement && /^(text|search|url|)$/.test(el.type))) {
@@ -167,7 +168,7 @@ export function insertText(text: string, el: Element | null): void {
   }
   if (composerInsert) return composerInsert(text)
   const ptyId = activeTerminalPtyId()
-  if (ptyId) return window.api.pty.write(ptyId, text)
+  if (ptyId) return writePty(ptyId, text)
   void navigator.clipboard.writeText(text)
   toast('Dictated text copied to the clipboard.')
 }

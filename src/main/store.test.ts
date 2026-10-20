@@ -17,11 +17,11 @@ describe('JsonStore', () => {
   it('keeps values across a new instance on the same folder', () => {
     const dir = tempDir()
     const first = new JsonStore(dir)
-    first.set('ui', { mode: 'thread', sidebarOpen: false, sidebarTab: 'browser' })
+    first.set('ui', { mode: 'thread', railOpen: false, sidebarOpen: false, sidebarTab: 'browser' })
     first.flush()
 
     const second = new JsonStore(dir)
-    expect(second.get('ui')).toEqual({ mode: 'thread', sidebarOpen: false, sidebarTab: 'browser' })
+    expect(second.get('ui')).toEqual({ mode: 'thread', railOpen: false, sidebarOpen: false, sidebarTab: 'browser' })
   })
 
   it('fills settings added in a newer version into an older file', () => {

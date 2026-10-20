@@ -38,6 +38,8 @@ export interface InvokeChannels {
   'app:setSettings': (settings: Settings) => void
   'app:openExternal': (url: string) => void
   'workspaces:add': () => string | null
+  /** "Continue without a folder": a private scratch folder in Documents\AgentDeck. */
+  'workspaces:addScratch': () => string
   'workspaces:rename': (id: string, name: string) => void
   'workspaces:remove': (id: string) => void
   'workspaces:setAccountOverride': (id: string, provider: Provider, accountId: string | null) => void
@@ -65,6 +67,10 @@ export interface InvokeChannels {
   'limits:resumeLater': (ptyId: string) => void
   'limits:dismiss': (ptyId: string) => void
   'voice:enhance': (text: string) => string
+  'window:minimize': () => void
+  'window:toggleMaximize': () => void
+  'window:close': () => void
+  'window:isMaximized': () => boolean
 }
 
 /** Fire-and-forget channels (renderer → main). */
@@ -80,6 +86,7 @@ export interface EventChannels {
   'pty:info': (list: PtyInfo[]) => void
   'pty:limit': (event: UsageLimitEvent) => void
   'routines:runs': (runs: RunSummary[]) => void
+  'window:maximized': (maximized: boolean) => void
 }
 
 type Invoke<C extends keyof InvokeChannels> = (...args: Parameters<InvokeChannels[C]>) => Promise<ReturnType<InvokeChannels[C]>>
@@ -99,6 +106,7 @@ export interface AgentDeckApi {
   }
   workspaces: {
     add: Invoke<'workspaces:add'>
+    addScratch: Invoke<'workspaces:addScratch'>
     rename: Invoke<'workspaces:rename'>
     remove: Invoke<'workspaces:remove'>
     setAccountOverride: Invoke<'workspaces:setAccountOverride'>
@@ -147,5 +155,12 @@ export interface AgentDeckApi {
   }
   voice: {
     enhance: Invoke<'voice:enhance'>
+  }
+  window: {
+    minimize: Invoke<'window:minimize'>
+    toggleMaximize: Invoke<'window:toggleMaximize'>
+    close: Invoke<'window:close'>
+    isMaximized: Invoke<'window:isMaximized'>
+    onMaximized: On<'window:maximized'>
   }
 }

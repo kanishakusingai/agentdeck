@@ -1,90 +1,98 @@
-import { Activity, Globe } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { Globe, LayoutDashboard } from 'lucide-react'
 import { agentById } from '@shared/agents'
 import type { PtyInfo } from '@shared/types'
 import { accountName } from '../../lib/accounts'
+import { tracker, useActivityClock, type Activity } from '../../lib/activity'
 import { focusPty, openBrowserPane } from '../../lib/canvas'
 import { cn } from '../../lib/cn'
 import { setSidebarTab, useApp } from '../../lib/store'
-import { StatusDot } from '../ui'
+import { ActivityDot, activityLabel, activityText, AgentIcon } from '../ui'
 import { BrowserView } from './BrowserView'
 
 function elapsed(ms: number, now: number): string {
   const m = Math.floor((now - ms) / 60000)
-  if (m < 1) return '<1m'
+  if (m < 1) return ''
   if (m < 60) return `${m}m`
   return `${Math.floor(m / 60)}h ${m % 60}m`
 }
 
-function useNow(intervalMs = 30000): number {
-  const [now, setNow] = useState(Date.now())
-  useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), intervalMs)
-    return () => clearInterval(t)
-  }, [intervalMs])
-  return now
+const ORDER: Activity[] = ['needs', 'working', 'idle']
+
+function Stat({ activity, value }: { activity: Activity; value: number }) {
+  return (
+    <div className="rounded-lg border border-line bg-surface px-3 py-2.5" data-testid={`stat-${activity}`}>
+      <div className="flex items-center gap-1.5 text-2xs font-medium text-fg-muted">
+        <ActivityDot activity={activity} />
+        {activityLabel(activity)}
+      </div>
+      <div className="tabular mt-1 text-xl font-semibold leading-none text-fg">{value}</div>
+    </div>
+  )
 }
 
-function Dashboard() {
+function Dashboard({ rows }: { rows: { info: PtyInfo; activity: Activity }[] }) {
   const snap = useApp((s) => s.snapshot!)
-  const ptyMap = useApp((s) => s.ptys)
-  const ptys = Object.values(ptyMap)
-  const now = useNow()
-  const agentsRunning = ptys.filter((p) => p.agentId && p.status === 'running').length
-  const limited = ptys.filter((p) => p.status === 'limited').length
-  const byWorkspace = snap.workspaces
-    .map((w) => ({ ws: w, list: ptys.filter((p) => p.workspaceId === w.id).sort((a, b) => a.startedAt - b.startedAt) }))
-    .filter((g) => g.list.length)
+  const now = useActivityClock()
+  const count = (a: Activity): number => rows.filter((r) => r.activity === a).length
+  const wsName = (id: string): string => snap.workspaces.find((w) => w.id === id)?.name ?? ''
 
-  const statusText = (p: PtyInfo): string => (p.status === 'limited' ? 'Usage limit' : p.status === 'exited' ? `Exited ${p.exitCode ?? ''}`.trim() : 'Running')
+  const subtitle = (p: PtyInfo): string => {
+    const agent = agentById(p.agentId)
+    const parts = [agent?.label ?? 'Terminal', wsName(p.workspaceId)]
+    if (agent?.provider) parts.push(accountName(snap, p.accountId))
+    return parts.filter(Boolean).join(' · ')
+  }
+  const statusText = (p: PtyInfo, a: Activity): string => {
+    if (p.status === 'limited') return 'Usage limit'
+    if (p.status === 'exited') return 'Exited'
+    const since = tracker.since(p.id, a)
+    const time = since !== undefined && a !== 'idle' ? elapsed(since, now) : ''
+    return time ? `${activityLabel(a)} ${time}` : activityLabel(a)
+  }
 
   return (
     <div className="flex h-full flex-col" data-testid="dashboard">
-      <div className="grid grid-cols-3 border-b border-line">
-        {[
-          { label: 'Agents working', value: agentsRunning, tone: agentsRunning ? 'text-ok' : 'text-fg' },
-          { label: 'Need attention', value: limited, tone: limited ? 'text-warn' : 'text-fg' },
-          { label: 'Panes open', value: ptys.length, tone: 'text-fg' }
-        ].map((s, i) => (
-          <div key={s.label} className={cn('px-3 py-3', i > 0 && 'border-l border-line')}>
-            <div className={cn('tabular text-lg font-semibold', s.tone)}>{s.value}</div>
-            <div className="text-2xs text-fg-faint">{s.label}</div>
-          </div>
+      <div className="grid shrink-0 grid-cols-3 gap-2 p-3">
+        {ORDER.map((a) => (
+          <Stat key={a} activity={a} value={count(a)} />
         ))}
       </div>
-      <div className="flex-1 overflow-y-auto py-2">
-        {byWorkspace.length === 0 && (
-          <div className="px-4 py-8 text-center text-xs leading-relaxed text-fg-faint">
+      <div className="flex-1 overflow-y-auto px-1.5 pb-3">
+        {rows.length === 0 && (
+          <div className="px-4 py-10 text-center text-xs leading-relaxed text-fg-faint">
             Nothing running yet.
             <br />
-            Launch an agent and it will show up here.
+            Launch an agent and it shows up here.
           </div>
         )}
-        {byWorkspace.map(({ ws, list }) => (
-          <section key={ws.id} className="mb-2">
-            <div className="px-4 pb-1 pt-2 text-2xs font-semibold uppercase tracking-[0.06em] text-fg-faint">{ws.name}</div>
-            <ul>
-              {list.map((p) => {
-                const provider = agentById(p.agentId)?.provider
-                return (
+        {ORDER.map((a) => {
+          const list = rows.filter((r) => r.activity === a)
+          if (list.length === 0) return null
+          return (
+            <section key={a} className="mb-1">
+              <div className="flex items-center gap-1.5 px-2.5 pb-1 pt-3 text-2xs font-semibold uppercase tracking-[0.06em] text-fg-faint">
+                {activityLabel(a)} <span className="tabular text-fg-muted">{list.length}</span>
+              </div>
+              <ul className="flex flex-col gap-px">
+                {list.map(({ info: p }) => (
                   <li key={p.id}>
-                    <button onClick={() => focusPty(p.id)} className="flex w-full items-center gap-3 px-4 py-2 text-left hover:bg-hover/60" data-testid="dashboard-row">
-                      <StatusDot status={p.status} />
+                    <button onClick={() => focusPty(p.id)} className="flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-hover/70" data-testid="dashboard-row">
+                      <AgentIcon agentId={p.agentId} size={14} tile />
                       <div className="min-w-0 flex-1">
-                        <div className="truncate text-sm text-fg">{p.title}</div>
-                        <div className="truncate text-2xs text-fg-faint">
-                          {statusText(p)}
-                          {provider && ` · ${accountName(snap, p.accountId)}`}
-                        </div>
+                        <div className="truncate text-[13px] font-medium text-fg">{p.title}</div>
+                        <div className="truncate text-2xs text-fg-faint">{subtitle(p)}</div>
                       </div>
-                      <span className="tabular text-2xs text-fg-faint">{elapsed(p.startedAt, now)}</span>
+                      <span className={cn('tabular flex shrink-0 items-center gap-1.5 text-2xs font-medium', activityText(a))}>
+                        <ActivityDot activity={a} />
+                        {statusText(p, a)}
+                      </span>
                     </button>
                   </li>
-                )
-              })}
-            </ul>
-          </section>
-        ))}
+                ))}
+              </ul>
+            </section>
+          )
+        })}
       </div>
     </div>
   )
@@ -94,13 +102,19 @@ export function Sidebar() {
   const tab = useApp((s) => s.snapshot!.ui.sidebarTab)
   const home = useApp((s) => s.snapshot!.settings.browserHomeUrl)
   const workspaceId = useApp((s) => s.snapshot!.ui.activeWorkspaceId)
+  const ptyMap = useApp((s) => s.ptys)
+  const now = useActivityClock()
+  const rows = Object.values(ptyMap)
+    .sort((a, b) => a.startedAt - b.startedAt)
+    .map((info) => ({ info, activity: tracker.activity(info, now) }))
+  const needs = rows.filter((r) => r.activity === 'needs').length
   const tabs = [
-    { id: 'dashboard' as const, label: 'Dashboard', icon: Activity },
-    { id: 'browser' as const, label: 'Browser', icon: Globe }
+    { id: 'dashboard' as const, label: 'Dashboard', icon: LayoutDashboard, badge: needs },
+    { id: 'browser' as const, label: 'Browser', icon: Globe, badge: 0 }
   ]
   return (
     <aside aria-label="Sidebar" className="flex h-full flex-col">
-      <div role="tablist" className="flex h-10 shrink-0 items-center gap-1 border-b border-line px-2">
+      <div role="tablist" className="flex h-11 shrink-0 items-center gap-1 border-b border-line px-2">
         {tabs.map((t) => (
           <button
             key={t.id}
@@ -109,10 +123,11 @@ export function Sidebar() {
             onClick={() => setSidebarTab(t.id)}
             className={cn(
               'flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors',
-              tab === t.id ? 'bg-raised text-fg' : 'text-fg-muted hover:text-fg'
+              tab === t.id ? 'bg-hover text-fg' : 'text-fg-faint hover:text-fg'
             )}
           >
             <t.icon size={13} /> {t.label}
+            {t.badge > 0 && <span className="tabular rounded bg-warn/15 px-1 text-2xs text-warn">{t.badge}</span>}
           </button>
         ))}
       </div>
@@ -123,7 +138,7 @@ export function Sidebar() {
         </div>
         {tab === 'dashboard' && (
           <div className="absolute inset-0 bg-panel">
-            <Dashboard />
+            <Dashboard rows={rows} />
           </div>
         )}
       </div>

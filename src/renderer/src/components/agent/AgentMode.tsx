@@ -1,4 +1,4 @@
-import { Bot, CalendarClock, CheckCircle2, CircleDashed, Loader2, Pencil, Play, Plus, Trash2, XCircle } from 'lucide-react'
+import { Bot, CalendarClock, CheckCircle2, CircleDashed, Loader2, Pencil, Play, Plus, Trash2, XCircle, Zap } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { agentById } from '@shared/agents'
 import { describeSchedule } from '@shared/schedule'
@@ -6,6 +6,7 @@ import type { Routine, RoutineRun, RunStatus } from '@shared/types'
 import { cn, formatTime, timeAgo } from '../../lib/cn'
 import { useApp } from '../../lib/store'
 import { Markdown } from '../Markdown'
+import { continueWithoutFolder } from '../code/CodeRail'
 import { Button, EmptyState, IconButton, SectionLabel, Toggle } from '../ui'
 import { RoutineEditor } from './RoutineEditor'
 
@@ -114,13 +115,18 @@ export function AgentMain() {
           title="Agents that work while you don't"
           body={
             snap.workspaces.length === 0
-              ? 'Add a workspace in Code mode first, then give an agent a job and a schedule.'
+              ? 'Routines need a place to work. Add a project folder in Code mode, or continue without one.'
               : 'Give an agent a job and a schedule. It runs in the background in your workspace and leaves you a report to read.'
           }
         >
           <Button variant="primary" onClick={() => setEditing({})} disabled={snap.workspaces.length === 0}>
             <Plus size={14} /> New routine
           </Button>
+          {snap.workspaces.length === 0 && (
+            <Button onClick={() => void continueWithoutFolder()}>
+              <Zap size={14} className="text-warn" /> Continue without a folder
+            </Button>
+          )}
         </EmptyState>
         {snap.workspaces.length > 0 && (
           <div className="w-full max-w-3xl">

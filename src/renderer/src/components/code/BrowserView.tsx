@@ -81,7 +81,7 @@ export function BrowserView({
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-bg">
+    <div className="flex h-full min-h-0 flex-col bg-panel">
       <form onSubmit={go} className="flex h-9 shrink-0 items-center gap-0.5 border-b border-line px-1.5">
         <IconButton label="Back" disabled={!nav.back} onClick={() => ref.current?.goBack()}>
           <ArrowLeft size={14} />
@@ -114,7 +114,7 @@ export function BrowserView({
       <div className="relative min-h-0 flex-1">
         <webview ref={ref as never} src={src} partition="persist:agentdeck-browser" className="absolute inset-0 h-full w-full" />
         {failed && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-bg p-6 text-center">
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-panel p-6 text-center">
             <div className="text-sm font-semibold text-fg">Nothing is running at this address yet</div>
             <div className="max-w-xs text-xs leading-relaxed text-fg-muted">
               {failed}

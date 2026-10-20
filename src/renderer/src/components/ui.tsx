@@ -2,9 +2,10 @@ import * as RDialog from '@radix-ui/react-dialog'
 import * as RMenu from '@radix-ui/react-dropdown-menu'
 import * as RTooltip from '@radix-ui/react-tooltip'
 import { cva, type VariantProps } from 'class-variance-authority'
-import { X } from 'lucide-react'
+import { Aperture, Asterisk, Atom, Bot, Boxes, CodeXml, Feather, Moon, MousePointer2, Orbit, Sparkle, SquareTerminal, X, Zap } from 'lucide-react'
 import { forwardRef, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from 'react'
 import type { PaneStatus } from '@shared/types'
+import type { Activity } from '../lib/activity'
 import { cn } from '../lib/cn'
 
 // ---------- Button ----------
@@ -14,7 +15,7 @@ const button = cva(
   {
     variants: {
       variant: {
-        primary: 'bg-accent text-bg hover:bg-accent-strong',
+        primary: 'bg-accent-solid text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.14)] hover:bg-accent',
         secondary: 'bg-raised text-fg border border-line-strong hover:bg-hover',
         ghost: 'text-fg-muted hover:text-fg hover:bg-hover',
         danger: 'bg-err/12 text-err border border-err/30 hover:bg-err/20'
@@ -22,6 +23,7 @@ const button = cva(
       size: {
         sm: 'h-7 px-2.5 text-xs',
         md: 'h-8 px-3 text-sm',
+        lg: 'h-10 px-4 text-sm',
         icon: 'h-7 w-7 text-fg-muted hover:text-fg'
       }
     },
@@ -114,10 +116,10 @@ export function Toggle({ checked, onChange, label }: { checked: boolean; onChang
       onClick={() => onChange(!checked)}
       className={cn(
         'relative inline-flex h-[18px] w-8 shrink-0 items-center rounded-full border transition-colors',
-        checked ? 'border-accent bg-accent' : 'border-line-strong bg-raised'
+        checked ? 'border-accent-solid bg-accent-solid' : 'border-line-strong bg-raised'
       )}
     >
-      <span className={cn('h-3 w-3 rounded-full transition-transform', checked ? 'translate-x-[15px] bg-bg' : 'translate-x-[2px] bg-fg-muted')} />
+      <span className={cn('h-3 w-3 rounded-full transition-transform', checked ? 'translate-x-[15px] bg-white' : 'translate-x-[2px] bg-fg-muted')} />
     </button>
   )
 }
@@ -148,9 +150,58 @@ export function StatusDot({ status, className }: { status: PaneStatus; className
   )
 }
 
+const activityStyle: Record<Activity, { dot: string; text: string; label: string }> = {
+  working: { dot: 'bg-ok', text: 'text-ok', label: 'Working' },
+  needs: { dot: 'bg-warn', text: 'text-warn', label: 'Needs you' },
+  idle: { dot: 'bg-fg-faint', text: 'text-fg-faint', label: 'Idle' }
+}
+
+export const activityLabel = (a: Activity): string => activityStyle[a].label
+export const activityText = (a: Activity): string => activityStyle[a].text
+
+export function ActivityDot({ activity, className }: { activity: Activity; className?: string }) {
+  return (
+    <span
+      role="img"
+      aria-label={activityStyle[activity].label}
+      className={cn('inline-block h-1.5 w-1.5 shrink-0 rounded-full', activityStyle[activity].dot, activity === 'working' && 'pulse-dot', className)}
+    />
+  )
+}
+
+// ---------- Agent marks ----------
+
+const AGENT_MARKS: Record<string, { icon: typeof Asterisk; color: string }> = {
+  claude: { icon: Asterisk, color: 'var(--color-claude)' },
+  codex: { icon: Aperture, color: '#ededef' },
+  gemini: { icon: Sparkle, color: '#60a5fa' },
+  'cursor-agent': { icon: MousePointer2, color: '#ededef' },
+  copilot: { icon: Bot, color: '#a1a1aa' },
+  grok: { icon: Orbit, color: '#ededef' },
+  droid: { icon: Boxes, color: '#f5a524' },
+  opencode: { icon: CodeXml, color: '#ededef' },
+  kimi: { icon: Moon, color: '#a1a1aa' },
+  amp: { icon: Zap, color: '#f97316' },
+  antigravity: { icon: Atom, color: '#60a5fa' },
+  aider: { icon: Feather, color: '#22c55e' }
+}
+
+/** A small brand-coloured mark for an agent (or a terminal icon for plain shells). */
+export function AgentIcon({ agentId, size = 14, tile, className }: { agentId?: string; size?: number; tile?: boolean; className?: string }) {
+  const mark = agentId ? AGENT_MARKS[agentId] : undefined
+  const Icon = mark?.icon ?? SquareTerminal
+  const glyph = <Icon size={size} strokeWidth={mark?.icon === Asterisk ? 2.75 : 2} style={{ color: mark?.color ?? 'var(--color-fg-muted)' }} aria-hidden className={tile ? undefined : className} />
+  if (!tile) return glyph
+  return (
+    <span className={cn('flex shrink-0 items-center justify-center rounded-lg border border-line bg-surface', className)} style={{ width: size + 14, height: size + 14 }}>
+      {glyph}
+    </span>
+  )
+}
+
 export function SectionLabel({ children, action }: { children: ReactNode; action?: ReactNode }) {
   return (
-    <div className="flex h-7 items-center justify-between px-3 text-2xs font-semibold uppercase tracking-[0.06em] text-fg-faint">
+    <div className="flex h-9 shrink-0 items-center justify-between pl-3.5 pr-2 text-xs font-medium text-fg-faint">
       <span>{children}</span>
       {action}
     </div>
@@ -188,10 +239,10 @@ export function Dialog({
   return (
     <RDialog.Root open={open} onOpenChange={onOpenChange}>
       <RDialog.Portal>
-        <RDialog.Overlay className="fixed inset-0 z-40 bg-black/55" />
+        <RDialog.Overlay className="fixed inset-0 z-40 bg-black/60 backdrop-blur-[2px]" />
         <RDialog.Content
           className={cn(
-            'fixed left-1/2 top-1/2 z-50 flex max-h-[85vh] w-[520px] -translate-x-1/2 -translate-y-1/2 flex-col rounded-lg border border-line-strong bg-panel shadow-[0_24px_64px_rgba(0,0,0,0.6)] focus:outline-none',
+            'fixed left-1/2 top-1/2 z-50 flex max-h-[85vh] w-[520px] -translate-x-1/2 -translate-y-1/2 flex-col rounded-xl border border-line-strong bg-panel shadow-[0_24px_64px_rgba(0,0,0,0.6)] focus:outline-none',
             className
           )}
         >

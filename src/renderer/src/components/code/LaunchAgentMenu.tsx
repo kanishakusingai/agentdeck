@@ -4,7 +4,7 @@ import { SYSTEM_ACCOUNT_ID, type DetectedAgent } from '@shared/types'
 import { resolveAccountName } from '../../lib/accounts'
 import { openTerminal } from '../../lib/canvas'
 import { refreshAgents, toast, useApp } from '../../lib/store'
-import { Button, Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger } from '../ui'
+import { AgentIcon, Button, Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger } from '../ui'
 
 function AgentItem({ agent, workspaceId }: { agent: DetectedAgent; workspaceId: string }) {
   const allAccounts = useApp((s) => s.snapshot!.accounts)
@@ -15,6 +15,7 @@ function AgentItem({ agent, workspaceId }: { agent: DetectedAgent; workspaceId: 
   if (!agent.installed) {
     return (
       <MenuItem disabled hint="Not installed">
+        <AgentIcon agentId={agent.id} size={13} />
         {agent.label}
       </MenuItem>
     )
@@ -22,7 +23,7 @@ function AgentItem({ agent, workspaceId }: { agent: DetectedAgent; workspaceId: 
   if (!agent.provider || accounts.length === 0) {
     return (
       <MenuItem onSelect={() => launch()} hint={agent.provider ? defaultName : undefined}>
-        <span className="h-1.5 w-1.5 rounded-full bg-ok" />
+        <AgentIcon agentId={agent.id} size={13} />
         {agent.label}
       </MenuItem>
     )
@@ -30,7 +31,7 @@ function AgentItem({ agent, workspaceId }: { agent: DetectedAgent; workspaceId: 
   return (
     <RMenu.Sub>
       <RMenu.SubTrigger className="flex h-8 cursor-default select-none items-center gap-2 rounded-md px-2 text-fg outline-none data-[highlighted]:bg-hover data-[state=open]:bg-hover">
-        <span className="h-1.5 w-1.5 rounded-full bg-ok" />
+        <AgentIcon agentId={agent.id} size={13} />
         <span className="flex-1">{agent.label}</span>
         <span className="text-xs text-fg-faint">{defaultName}</span>
         <ChevronRight size={13} className="text-fg-faint" />

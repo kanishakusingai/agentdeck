@@ -3,14 +3,15 @@ import { useEffect, useRef, useState } from 'react'
 import { asPastedMessage } from '@shared/paste'
 import { activeTerminalPtyId } from '../../lib/canvas'
 import { cn } from '../../lib/cn'
+import { writePty } from '../../lib/pty-bus'
 import { errorText, toast, useApp } from '../../lib/store'
 import { registerComposer, toggleRecording, useVoice } from '../../voice/dictation'
-import { IconButton, Kbd, Tip } from '../ui'
+import { AgentIcon, IconButton, Kbd, Tip } from '../ui'
 
 /** Send text to an agent's terminal as one message, then press Enter. */
 function sendToPty(ptyId: string, text: string): void {
-  window.api.pty.write(ptyId, asPastedMessage(text))
-  setTimeout(() => window.api.pty.write(ptyId, '\r'), 60)
+  writePty(ptyId, asPastedMessage(text))
+  setTimeout(() => writePty(ptyId, '\r'), 60)
 }
 
 export function Composer() {
@@ -67,31 +68,37 @@ export function Composer() {
   }
 
   return (
-    <div className="shrink-0 border-t border-line bg-bg px-3 pb-3 pt-2.5">
-      <div className="mb-1.5 flex items-center gap-2 px-1 text-2xs text-fg-faint">
-        <span>To</span>
-        <span className={cn('font-medium', target ? 'text-fg-muted' : 'text-fg-faint')}>{target ? target.title : 'no pane selected'}</span>
-        <span className="flex-1" />
-        <span className="flex items-center gap-1">
-          Hold <Kbd>{pttKey}</Kbd> to dictate
+    <div className="shrink-0 rounded-xl border border-line bg-panel transition-colors focus-within:border-accent/60">
+      <textarea
+        ref={ref}
+        rows={1}
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault()
+            send()
+          }
+        }}
+        placeholder="Tell the agent what to do next…"
+        aria-label="Message to the active pane"
+        className="block max-h-[132px] min-h-10 w-full resize-none bg-transparent px-3.5 pb-1 pt-3 text-sm leading-relaxed text-fg placeholder:text-fg-faint focus:outline-none"
+      />
+      <div className="flex items-center gap-1.5 px-2 pb-2">
+        <span
+          className={cn(
+            'flex h-6 max-w-[45%] items-center gap-1.5 rounded-md border border-line bg-surface px-2 text-2xs',
+            target ? 'text-fg-muted' : 'text-fg-faint'
+          )}
+          title="Messages go to the pane you clicked last"
+        >
+          {target && <AgentIcon agentId={target.agentId} size={11} />}
+          <span className="truncate">{target ? target.title : 'Click a pane to choose who gets this'}</span>
         </span>
-      </div>
-      <div className="flex items-end gap-1.5 rounded-lg border border-line-strong bg-surface p-1.5 focus-within:border-accent">
-        <textarea
-          ref={ref}
-          rows={1}
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-              e.preventDefault()
-              send()
-            }
-          }}
-          placeholder="Tell the agent what to change…  (Enter to send, Shift+Enter for a new line)"
-          aria-label="Message to the active pane"
-          className="max-h-[132px] min-h-8 flex-1 resize-none bg-transparent px-2 py-1.5 text-sm leading-relaxed text-fg placeholder:text-fg-faint focus:outline-none"
-        />
+        <span className="hidden items-center gap-1 text-2xs text-fg-faint lg:flex">
+          <Kbd>Enter</Kbd> send · <Kbd>Shift</Kbd>+<Kbd>Enter</Kbd> new line · hold <Kbd>{pttKey}</Kbd> to talk
+        </span>
+        <span className="flex-1" />
         <IconButton label={recording ? 'Stop dictation' : 'Dictate'} tipSide="top" onClick={toggleRecording} className={recording ? 'bg-err/15 text-err' : undefined}>
           <Mic size={15} />
         </IconButton>
@@ -103,7 +110,7 @@ export function Composer() {
             aria-label="Send"
             onClick={send}
             disabled={!text.trim()}
-            className="flex h-7 w-7 items-center justify-center rounded-md bg-accent text-bg transition-colors hover:bg-accent-strong disabled:opacity-35"
+            className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent-solid text-white transition-colors hover:bg-accent disabled:bg-hover disabled:text-fg-faint"
           >
             <ArrowUp size={15} strokeWidth={2.5} />
           </button>

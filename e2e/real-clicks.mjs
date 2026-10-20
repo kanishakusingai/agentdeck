@@ -75,4 +75,25 @@ const before = await sidebarBtn.getAttribute('aria-label')
 realClick((bounds.x + sidebar.x + sidebar.width / 2) * scale, (bounds.y + sidebar.y + sidebar.height / 2) * scale)
 await page.waitForTimeout(700)
 console.log(`real click on "Sidebar": ${(await sidebarBtn.getAttribute('aria-label')) !== before ? 'WORKS' : 'IGNORED'}`)
+
+// The window buttons drawn in the title bar.
+const winState = () => app.evaluate(({ BrowserWindow }) => {
+  const w = BrowserWindow.getAllWindows()[0]
+  return { max: w.isMaximized(), min: w.isMinimized() }
+})
+async function clickButton(name) {
+  const box = await page.getByRole('button', { name }).boundingBox()
+  realClick((bounds.x + box.x + box.width / 2) * scale, (bounds.y + box.y + box.height / 2) * scale)
+  await page.waitForTimeout(900)
+}
+await clickButton('Maximize window')
+console.log(`real click on "Maximize": ${(await winState()).max ? 'WORKS' : 'IGNORED'}`)
+// Maximising moves the window: re-measure before the next click.
+Object.assign(bounds, await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].getContentBounds()))
+await clickButton('Restore window')
+console.log(`real click on "Restore": ${!(await winState()).max ? 'WORKS' : 'IGNORED'}`)
+Object.assign(bounds, await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].getContentBounds()))
+await clickButton('Minimize window')
+console.log(`real click on "Minimize": ${(await winState()).min ? 'WORKS' : 'IGNORED'}`)
+await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].restore())
 await app.close()

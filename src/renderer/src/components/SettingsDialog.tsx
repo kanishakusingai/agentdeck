@@ -291,7 +291,8 @@ export const SHORTCUTS: [string, string][] = [
   ['Split active pane right', 'Ctrl+Shift+\\'],
   ['Split active pane down', 'Ctrl+Shift+-'],
   ['Tidy the canvas', 'Ctrl+Shift+L'],
-  ['Show / hide sidebar', 'Ctrl+B'],
+  ['Show / hide the right sidebar', 'Ctrl+B'],
+  ['Show / hide the left panel', 'Ctrl+Shift+B'],
   ['Add a workspace', 'Ctrl+O'],
   ['Settings', 'Ctrl+,'],
   ['Dictate (hold)', 'Push-to-talk key']
@@ -322,7 +323,7 @@ export function SettingsDialog() {
     <RDialog.Root open={section !== null} onOpenChange={(o) => !o && close()}>
       <RDialog.Portal>
         <RDialog.Overlay className="fixed inset-0 z-40 bg-black/55" />
-        <RDialog.Content className="fixed left-1/2 top-1/2 z-50 flex h-[min(680px,88vh)] w-[min(860px,92vw)] -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-lg border border-line-strong bg-panel shadow-[0_24px_64px_rgba(0,0,0,0.6)] focus:outline-none">
+        <RDialog.Content className="fixed left-1/2 top-1/2 z-50 flex h-[min(680px,88vh)] w-[min(860px,92vw)] -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-xl border border-line-strong bg-panel shadow-[0_24px_64px_rgba(0,0,0,0.6)] focus:outline-none">
           <RDialog.Description className="sr-only">AgentDeck settings</RDialog.Description>
           <nav className="flex w-52 shrink-0 flex-col gap-0.5 border-r border-line bg-bg p-2">
             <RDialog.Title className="px-2 pb-3 pt-2 text-base font-semibold text-fg">Settings</RDialog.Title>

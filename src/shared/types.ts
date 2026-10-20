@@ -160,6 +160,9 @@ export type SidebarTab = 'browser' | 'dashboard'
 export interface UiState {
   mode: Mode
   activeWorkspaceId?: string
+  /** Left rail (workspaces / routines / threads list). */
+  railOpen: boolean
+  /** Right sidebar (dashboard / browser) in Code mode. */
   sidebarOpen: boolean
   sidebarTab: SidebarTab
 }
@@ -186,6 +189,7 @@ export const DEFAULT_SETTINGS: Settings = {
 
 export const DEFAULT_UI: UiState = {
   mode: 'code',
+  railOpen: true,
   sidebarOpen: true,
   sidebarTab: 'dashboard'
 }

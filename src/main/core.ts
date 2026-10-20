@@ -111,10 +111,10 @@ export class AppCore {
 
   // ---------- workspaces ----------
 
-  addWorkspace(path: string): string {
+  addWorkspace(path: string, name?: string): string {
     const existing = this.store.get('workspaces').find((w) => samePath(w.path, path))
     if (existing) return existing.id
-    const ws: Workspace = { id: randomUUID(), name: basename(path) || path, path, accountOverrides: {}, createdAt: Date.now() }
+    const ws: Workspace = { id: randomUUID(), name: name ?? (basename(path) || path), path, accountOverrides: {}, createdAt: Date.now() }
     this.store.update('workspaces', (list) => [...list, ws])
     this.broadcast()
     return ws.id

@@ -1,19 +1,20 @@
-import { Bot, Loader2, Mic, MessagesSquare, PanelRight, Settings2, SquareTerminal } from 'lucide-react'
+import { Loader2, Maximize2, Mic, Minimize2, Minus, PanelLeft, PanelRight, Settings2, X } from 'lucide-react'
+import { useEffect, useState } from 'react'
 import type { Mode } from '@shared/types'
 import { cn } from '../lib/cn'
-import { setMode, toggleSidebar, useApp } from '../lib/store'
+import { setMode, toggleRail, toggleSidebar, useApp } from '../lib/store'
 import { toggleRecording, useVoice } from '../voice/dictation'
 import { IconButton, Tip } from './ui'
 
-const MODES: { id: Mode; label: string; icon: typeof Bot; key: string }[] = [
-  { id: 'agent', label: 'Agent', icon: Bot, key: '1' },
-  { id: 'code', label: 'Code', icon: SquareTerminal, key: '2' },
-  { id: 'thread', label: 'Thread', icon: MessagesSquare, key: '3' }
+const MODES: { id: Mode; label: string; key: string }[] = [
+  { id: 'agent', label: 'Agent', key: '1' },
+  { id: 'code', label: 'Code', key: '2' },
+  { id: 'thread', label: 'Thread', key: '3' }
 ]
 
 function ModeSwitch({ mode }: { mode: Mode }) {
   return (
-    <div role="tablist" aria-label="Mode" className="no-drag flex h-7 items-center gap-0.5 rounded-md border border-line bg-surface p-0.5">
+    <div role="tablist" aria-label="Mode" className="no-drag flex h-7 items-center gap-0.5 rounded-lg border border-line bg-panel p-[3px]">
       {MODES.map((m) => (
         <Tip key={m.id} label={<>{m.label} mode · Ctrl+{m.key}</>}>
           <button
@@ -22,12 +23,43 @@ function ModeSwitch({ mode }: { mode: Mode }) {
             data-mode={m.id}
             onClick={() => setMode(m.id)}
             className={cn(
-              'no-drag flex h-full w-[84px] items-center justify-center gap-1.5 rounded-[5px] border text-xs font-medium transition-colors',
-              mode === m.id ? 'border-line-strong bg-raised text-fg' : 'border-transparent text-fg-muted hover:text-fg'
+              'no-drag flex h-full min-w-[64px] items-center justify-center rounded-md px-3 text-xs font-medium',
+              mode === m.id ? 'bg-hover text-fg shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]' : 'text-fg-faint hover:text-fg'
             )}
           >
-            <m.icon size={14} strokeWidth={2} className={mode === m.id ? 'text-accent' : undefined} />
             {m.label}
+          </button>
+        </Tip>
+      ))}
+    </div>
+  )
+}
+
+/** Close / minimise / maximise, drawn by the app (Windows and Linux). */
+function WindowControls() {
+  const [maximized, setMaximized] = useState(false)
+  useEffect(() => {
+    void window.api.window.isMaximized().then(setMaximized)
+    return window.api.window.onMaximized(setMaximized)
+  }, [])
+  const buttons = [
+    { label: 'Close window', color: 'bg-[#ff5f57]', icon: X, run: () => void window.api.window.close() },
+    { label: 'Minimize window', color: 'bg-[#febc2e]', icon: Minus, run: () => void window.api.window.minimize() },
+    {
+      label: maximized ? 'Restore window' : 'Maximize window',
+      color: 'bg-[#28c840]',
+      icon: maximized ? Minimize2 : Maximize2,
+      run: () => void window.api.window.toggleMaximize()
+    }
+  ]
+  return (
+    <div className="no-drag group flex items-center" data-testid="window-controls">
+      {buttons.map((b) => (
+        <Tip key={b.label} label={b.label}>
+          <button aria-label={b.label} onClick={b.run} className="no-drag flex h-7 w-[22px] items-center justify-center">
+            <span className={cn('flex h-3 w-3 items-center justify-center rounded-full shadow-[inset_0_0_0_0.5px_rgba(0,0,0,0.35)]', b.color)}>
+              <b.icon size={8} strokeWidth={3} className="text-black/60 opacity-0 transition-opacity group-hover:opacity-100" />
+            </span>
           </button>
         </Tip>
       ))}
@@ -70,26 +102,27 @@ function VoiceIndicator() {
 export function TitleBar() {
   const mode = useApp((s) => s.snapshot!.ui.mode)
   const sidebarOpen = useApp((s) => s.snapshot!.ui.sidebarOpen)
-  const workspace = useApp((s) => s.snapshot!.workspaces.find((w) => w.id === s.snapshot!.ui.activeWorkspaceId))
+  const railOpen = useApp((s) => s.snapshot!.ui.railOpen)
   const isMac = window.api.platform === 'darwin'
 
   return (
     // Three-column grid keeps the mode switch centred without CSS transforms:
     // Electron computes the title bar's clickable (no-drag) areas without transforms,
     // so a translated switch would sit in the wrong place and swallow clicks.
-    <header
-      className="drag grid h-10 shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-3 border-b border-line bg-bg"
-      style={{ paddingLeft: isMac ? 80 : 12, paddingRight: isMac ? 8 : 146 }}
-    >
-      <div className="flex min-w-0 items-center gap-2.5">
-        <Logo />
-        <span className="text-sm font-semibold tracking-tight text-fg">AgentDeck</span>
-        {mode === 'code' && workspace && (
-          <>
-            <span className="text-fg-faint">/</span>
-            <span className="truncate text-sm text-fg-muted">{workspace.name}</span>
-          </>
-        )}
+    <header className="drag grid h-11 shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-3 pr-2" style={{ paddingLeft: isMac ? 84 : 10 }}>
+      <div className="flex min-w-0 items-center gap-3">
+        {!isMac && <WindowControls />}
+        <div className="flex min-w-0 items-center gap-2">
+          <Logo />
+          <span className="text-[13px] font-semibold tracking-tight text-fg">AgentDeck</span>
+        </div>
+        <IconButton
+          label={railOpen ? 'Hide the left panel · Ctrl+Shift+B' : 'Show the left panel · Ctrl+Shift+B'}
+          onClick={() => toggleRail()}
+          className={cn('h-6 w-6', railOpen && 'text-fg')}
+        >
+          <PanelLeft size={14} />
+        </IconButton>
       </div>
 
       <ModeSwitch mode={mode} />
@@ -109,12 +142,20 @@ export function TitleBar() {
   )
 }
 
+/** The AgentDeck mark: a blue tile with a terminal prompt. */
 export function Logo({ size = 18 }: { size?: number }) {
+  const id = `logo-g-${size}`
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden>
-      <rect x="2" y="3" width="20" height="18" rx="5" fill="#8e97ff" />
-      <path d="M7 9.5l3 2.5-3 2.5" fill="none" stroke="#0b0d10" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M12.5 15h4.5" stroke="#0b0d10" strokeWidth="2" strokeLinecap="round" />
+      <defs>
+        <linearGradient id={id} x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stopColor="#60a5fa" />
+          <stop offset="1" stopColor="#2563eb" />
+        </linearGradient>
+      </defs>
+      <rect x="1.5" y="2.5" width="21" height="19" rx="5.5" fill={`url(#${id})`} />
+      <path d="M7 9.5l3 2.5-3 2.5" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M12.5 15h4.5" stroke="#fff" strokeWidth="2" strokeLinecap="round" />
     </svg>
   )
 }

@@ -4,32 +4,32 @@ import { Terminal, type ITheme } from '@xterm/xterm'
 import type { IDockviewPanelProps } from 'dockview-react'
 import { useEffect, useRef, useState } from 'react'
 import { setPanelPty, type PanelParams } from '../../lib/canvas'
-import { subscribePty } from '../../lib/pty-bus'
+import { subscribePty, writePty } from '../../lib/pty-bus'
 import { errorText, toast, useApp } from '../../lib/store'
 import { LimitBanner } from './LimitBanner'
 
 export const TERMINAL_THEME: ITheme = {
-  background: '#0b0d10',
-  foreground: '#d8dde3',
-  cursor: '#a9b0ff',
-  cursorAccent: '#0b0d10',
-  selectionBackground: '#8e97ff40',
-  black: '#1a1f25',
-  red: '#f47067',
-  green: '#57c76a',
-  yellow: '#e3b341',
-  blue: '#6cb6ff',
-  magenta: '#c49cff',
-  cyan: '#56d4dd',
-  white: '#c9d1d9',
-  brightBlack: '#6e7781',
-  brightRed: '#ff938a',
-  brightGreen: '#7ee787',
-  brightYellow: '#f2cc60',
-  brightBlue: '#91cbff',
-  brightMagenta: '#dcbdfb',
-  brightCyan: '#87e8ee',
-  brightWhite: '#f0f3f6'
+  background: '#0e0e11',
+  foreground: '#e4e4e7',
+  cursor: '#60a5fa',
+  cursorAccent: '#0e0e11',
+  selectionBackground: '#3b82f64d',
+  black: '#1b1b1f',
+  red: '#f87171',
+  green: '#4ade80',
+  yellow: '#fbbf24',
+  blue: '#60a5fa',
+  magenta: '#c084fc',
+  cyan: '#22d3ee',
+  white: '#d4d4d8',
+  brightBlack: '#71717a',
+  brightRed: '#fca5a5',
+  brightGreen: '#86efac',
+  brightYellow: '#fde68a',
+  brightBlue: '#93c5fd',
+  brightMagenta: '#d8b4fe',
+  brightCyan: '#67e8f9',
+  brightWhite: '#fafafa'
 }
 
 export function TerminalPanel(props: IDockviewPanelProps) {
@@ -53,7 +53,8 @@ export function TerminalPanel(props: IDockviewPanelProps) {
   useEffect(() => {
     if ((ptyId && useApp.getState().ptys[ptyId]) || creating.current) return
     creating.current = true
-    const current = props.api.getParameters<PanelParams>()
+    // Merge what the panel was created with and any later updates (restored panes only have the former).
+    const current = { ...(props.params as unknown as PanelParams), ...(props.api.getParameters<PanelParams>() ?? {}) }
     const agent = useApp.getState().agents.find((a) => a.id === current.agentId && a.installed)
     window.api.pty
       .create({
@@ -152,7 +153,7 @@ export function TerminalPanel(props: IDockviewPanelProps) {
       for (const [chunk, end] of queued) if (end > replayEnd) term.write(chunk)
       queued.length = 0
     })
-    const input = term.onData((d) => window.api.pty.write(ptyId, d))
+    const input = term.onData((d) => writePty(ptyId, d))
     const resize = term.onResize(({ cols, rows }) => window.api.pty.resize(ptyId, cols, rows))
     try {
       fitRef.current?.fit()
@@ -172,7 +173,7 @@ export function TerminalPanel(props: IDockviewPanelProps) {
   }, [ptyId, alive, props.api])
 
   return (
-    <div className="flex h-full flex-col bg-bg" data-pty-id={ptyId} onMouseDown={() => termRef.current?.focus()}>
+    <div className="flex h-full flex-col bg-panel" data-pty-id={ptyId} onMouseDown={() => termRef.current?.focus()}>
       {ptyId && <LimitBanner ptyId={ptyId} />}
       <div ref={host} className="min-h-0 flex-1 overflow-hidden" />
     </div>
