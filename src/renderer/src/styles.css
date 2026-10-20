@@ -1,0 +1,166 @@
+@import 'tailwindcss';
+
+@theme {
+  --color-bg: #0b0d10;
+  --color-panel: #0f1215;
+  --color-surface: #14181d;
+  --color-raised: #1a1f25;
+  --color-hover: #20262d;
+  --color-line: #20262d;
+  --color-line-strong: #2d343d;
+  --color-fg: #e6e9ed;
+  --color-fg-muted: #9aa4af;
+  --color-fg-faint: #7a8490;
+  --color-accent: #8e97ff;
+  --color-accent-strong: #a9b0ff;
+  --color-accent-soft: #8e97ff1f;
+  --color-ok: #3fb950;
+  --color-warn: #e3b341;
+  --color-err: #f85149;
+
+  --font-sans: 'Segoe UI Variable Text', 'Segoe UI', system-ui, -apple-system, 'Inter', sans-serif;
+  --font-mono: 'Cascadia Code', 'Cascadia Mono', Consolas, 'JetBrains Mono', ui-monospace, monospace;
+
+  --text-2xs: 11px;
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-base: 14px;
+
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-fg);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+  user-select: none;
+}
+
+::selection {
+  background: #8e97ff55;
+}
+
+input,
+textarea,
+select,
+[contenteditable] {
+  user-select: text;
+}
+
+/* Hairline, unobtrusive scrollbars */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: #2d343d;
+  border: 3px solid transparent;
+  background-clip: padding-box;
+  border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #3a424c;
+  background-clip: padding-box;
+  border: 3px solid transparent;
+}
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+.drag {
+  -webkit-app-region: drag;
+}
+
+/* Kept mounted (terminals keep running) but fully hidden — dockview sashes
+   set their own visibility, so force it on every descendant. */
+.keep-hidden,
+.keep-hidden * {
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+.no-drag {
+  -webkit-app-region: no-drag;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Dockview, re-skinned to the app palette ---------- */
+.dockview-theme-agentdeck {
+  --dv-group-view-background-color: var(--color-bg);
+  --dv-tabs-and-actions-container-background-color: var(--color-panel);
+  --dv-activegroup-visiblepanel-tab-background-color: var(--color-bg);
+  --dv-activegroup-hiddenpanel-tab-background-color: var(--color-panel);
+  --dv-inactivegroup-visiblepanel-tab-background-color: var(--color-bg);
+  --dv-inactivegroup-hiddenpanel-tab-background-color: var(--color-panel);
+  --dv-tab-divider-color: var(--color-line);
+  --dv-activegroup-visiblepanel-tab-color: var(--color-fg);
+  --dv-activegroup-hiddenpanel-tab-color: var(--color-fg-muted);
+  --dv-inactivegroup-visiblepanel-tab-color: var(--color-fg-muted);
+  --dv-inactivegroup-hiddenpanel-tab-color: var(--color-fg-faint);
+  --dv-separator-border: var(--color-line);
+  --dv-paneview-header-border-color: var(--color-line);
+  --dv-tabs-and-actions-container-height: 32px;
+  --dv-tabs-and-actions-container-font-size: 12px;
+  --dv-drag-over-background-color: #8e97ff26;
+  --dv-drag-over-border-color: #8e97ff;
+  --dv-icon-hover-background-color: var(--color-hover);
+  --dv-sash-color: transparent;
+  --dv-active-sash-color: #8e97ff66;
+  --dv-tabs-container-scrollbar-color: #2d343d;
+  --dv-floating-box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+}
+.dockview-theme-agentdeck .dv-tabs-and-actions-container {
+  border-bottom: 1px solid var(--color-line);
+}
+.dockview-theme-agentdeck .dv-groupview.dv-active-group > .dv-tabs-and-actions-container {
+  box-shadow: inset 0 2px 0 -1px #8e97ff99;
+}
+.dockview-theme-agentdeck .dv-tab {
+  padding: 0 4px 0 10px;
+}
+
+/* ---------- xterm ---------- */
+.xterm {
+  padding: 8px 0 0 10px;
+  height: 100%;
+}
+.xterm .xterm-viewport {
+  background-color: transparent !important;
+}
+
+@keyframes pulse-dot {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+.pulse-dot {
+  animation: pulse-dot 1.4s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .pulse-dot {
+    animation: none;
+  }
+  * {
+    transition: none !important;
+  }
+}

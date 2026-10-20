@@ -1,0 +1,534 @@
+import { randomUUID } from 'crypto'
+import { existsSync, mkdirSync, rmSync, writeFileSync } from 'fs'
+import { homedir } from 'os'
+import { basename, join, resolve } from 'path'
+import type { AppSnapshot, PtySnapshot, RunSummary } from '@shared/api'
+import { agentById } from '@shared/agents'
+import {
+  SYSTEM_ACCOUNT_ID,
+  type Account,
+  type DetectedAgent,
+  type Provider,
+  type PtyCreateOptions,
+  type PtyInfo,
+  type Routine,
+  type RoutineRun,
+  type Settings,
+  type Thread,
+  type ThreadSummary,
+  type UiState,
+  type Workspace
+} from '@shared/types'
+import { accountEnv, resolveAccount } from './accounts'
+import { detectAgents } from './agents'
+import { buildHandoffSummary, handoffPrompt } from './handoff'
+import { ENHANCE_INSTRUCTION, runHeadless } from './headless'
+import { buildShellLaunch } from './launch'
+import { PtyManager } from './pty-manager'
+import { nextRun, Scheduler } from './schedule'
+import { JsonStore } from './store'
+import { listThreads, readThread, type ThreadIndexEntry, type TranscriptRoot } from './transcripts'
+import { detectUsageLimit, stripAnsi } from './usage-limit'
+
+type Send = (channel: string, ...args: unknown[]) => void
+
+const MAX_RUNS = 200
+const samePath = (a: string, b: string): boolean =>
+  resolve(a).replace(/[\\/]+$/, '').toLowerCase() === resolve(b).replace(/[\\/]+$/, '').toLowerCase()
+
+/** All app behaviour that isn't window management. IPC handlers call into this. */
+export class AppCore {
+  readonly store: JsonStore
+  readonly ptys = new PtyManager()
+  readonly scheduler: Scheduler
+  private readonly infos = new Map<string, PtyInfo>()
+  private readonly limitTails = new Map<string, string>()
+  private readonly resumeTimers = new Map<string, NodeJS.Timeout>()
+  private readonly threadIndex = new Map<string, ThreadIndexEntry>()
+  private agents: DetectedAgent[] | undefined
+
+  constructor(
+    private readonly dataDir: string,
+    private readonly send: Send
+  ) {
+    this.store = new JsonStore(dataDir)
+    this.ptys.on('data', (id: string, chunk: string, end: number) => {
+      this.send('pty:data', id, chunk, end)
+      this.watchForLimit(id, chunk)
+    })
+    this.ptys.on('exit', (id: string, exitCode: number) => {
+      const info = this.infos.get(id)
+      if (info) {
+        this.infos.set(id, { ...info, status: 'exited', exitCode })
+        this.broadcastPtys()
+      }
+    })
+    this.scheduler = new Scheduler({
+      getRoutines: () => this.store.get('routines'),
+      saveRoutines: (routines) => {
+        this.store.set('routines', routines)
+        this.broadcast()
+      },
+      saveRun: (run) => this.saveRun(run),
+      execute: (routine, onOutput) => this.executeRoutine(routine, onOutput)
+    })
+    // Runs that were mid-flight when the app closed can't be resumed.
+    this.store.update('runs', (runs) =>
+      runs.map((r) => (r.status === 'running' ? { ...r, status: 'failed', output: `${r.output}\n[AgentDeck closed during this run]` } : r))
+    )
+  }
+
+  // ---------- snapshot ----------
+
+  snapshot(): AppSnapshot {
+    const { runs: _runs, layouts: _layouts, ...rest } = this.store.snapshot()
+    return rest
+  }
+
+  broadcast(): void {
+    this.send('app:snapshot', this.snapshot())
+  }
+
+  setUi(ui: UiState): void {
+    this.store.set('ui', ui)
+  }
+
+  setSettings(settings: Settings): void {
+    this.store.set('settings', settings)
+    this.broadcast()
+  }
+
+  getLayouts(): Record<string, unknown> {
+    return this.store.get('layouts')
+  }
+
+  setLayout(workspaceId: string, layout: unknown): void {
+    this.store.update('layouts', (l) => ({ ...l, [workspaceId]: layout }))
+  }
+
+  // ---------- workspaces ----------
+
+  addWorkspace(path: string): string {
+    const existing = this.store.get('workspaces').find((w) => samePath(w.path, path))
+    if (existing) return existing.id
+    const ws: Workspace = { id: randomUUID(), name: basename(path) || path, path, accountOverrides: {}, createdAt: Date.now() }
+    this.store.update('workspaces', (list) => [...list, ws])
+    this.broadcast()
+    return ws.id
+  }
+
+  renameWorkspace(id: string, name: string): void {
+    const clean = name.trim()
+    if (!clean) return
+    this.store.update('workspaces', (list) => list.map((w) => (w.id === id ? { ...w, name: clean } : w)))
+    this.broadcast()
+  }
+
+  removeWorkspace(id: string): void {
+    for (const info of [...this.infos.values()]) if (info.workspaceId === id) this.disposePty(info.id)
+    this.store.update('workspaces', (list) => list.filter((w) => w.id !== id))
+    this.store.update('layouts', ({ [id]: _gone, ...rest }) => rest)
+    this.store.update('routines', (list) => list.map((r) => (r.workspaceId === id ? { ...r, enabled: false } : r)))
+    this.broadcast()
+  }
+
+  setAccountOverride(id: string, provider: Provider, accountId: string | null): void {
+    this.store.update('workspaces', (list) =>
+      list.map((w) => {
+        if (w.id !== id) return w
+        const overrides = { ...w.accountOverrides }
+        if (accountId) overrides[provider] = accountId
+        else delete overrides[provider]
+        return { ...w, accountOverrides: overrides }
+      })
+    )
+    this.broadcast()
+  }
+
+  workspace(id: string): Workspace | undefined {
+    return this.store.get('workspaces').find((w) => w.id === id)
+  }
+
+  // ---------- agents ----------
+
+  detectAgents(force = false): DetectedAgent[] {
+    if (!this.agents || force) this.agents = detectAgents()
+    return this.agents
+  }
+
+  private agent(id: string | undefined): DetectedAgent | undefined {
+    return id ? this.detectAgents().find((a) => a.id === id) : undefined
+  }
+
+  // ---------- accounts ----------
+
+  addAccount(provider: Provider, name: string): Account {
+    const id = randomUUID()
+    const account: Account = {
+      id,
+      provider,
+      name: name.trim() || (provider === 'claude' ? 'Claude account' : 'Codex account'),
+      configDir: join(this.dataDir, 'accounts', id),
+      createdAt: Date.now()
+    }
+    mkdirSync(account.configDir, { recursive: true })
+    this.store.update('accounts', (list) => [...list, account])
+    this.broadcast()
+    return account
+  }
+
+  renameAccount(id: string, name: string): void {
+    const clean = name.trim()
+    if (!clean) return
+    this.store.update('accounts', (list) => list.map((a) => (a.id === id ? { ...a, name: clean } : a)))
+    this.broadcast()
+  }
+
+  removeAccount(id: string): void {
+    const account = this.account(id)
+    if (!account) return
+    this.store.update('accounts', (list) => list.filter((a) => a.id !== id))
+    this.store.update('defaults', (d) => Object.fromEntries(Object.entries(d).filter(([, v]) => v !== id)))
+    this.store.update('workspaces', (list) =>
+      list.map((w) => ({
+        ...w,
+        accountOverrides: Object.fromEntries(Object.entries(w.accountOverrides).filter(([, v]) => v !== id))
+      }))
+    )
+    // The folder holds that account's sign-in; deleting it signs the account out.
+    if (account.configDir.startsWith(join(this.dataDir, 'accounts'))) {
+      rmSync(account.configDir, { recursive: true, force: true })
+    }
+    this.broadcast()
+  }
+
+  setDefaultAccount(provider: Provider, accountId: string | null): void {
+    this.store.update('defaults', (d) => {
+      const next = { ...d }
+      if (accountId && accountId !== SYSTEM_ACCOUNT_ID) next[provider] = accountId
+      else delete next[provider]
+      return next
+    })
+    this.broadcast()
+  }
+
+  account(id: string | undefined): Account | undefined {
+    return this.store.get('accounts').find((a) => a.id === id)
+  }
+
+  accountDir(id: string): string | undefined {
+    return this.account(id)?.configDir
+  }
+
+  accountLabel(id: string | undefined): string {
+    return !id || id === SYSTEM_ACCOUNT_ID ? 'System login' : (this.account(id)?.name ?? 'Unknown account')
+  }
+
+  private resolveFor(provider: Provider, workspace: Workspace | undefined, explicit?: string): string {
+    return resolveAccount({
+      provider,
+      accounts: this.store.get('accounts'),
+      defaults: this.store.get('defaults'),
+      workspace,
+      explicit
+    })
+  }
+
+  // ---------- terminals ----------
+
+  createPty(opts: PtyCreateOptions): PtyInfo {
+    const workspace = this.workspace(opts.workspaceId)
+    const cwd = workspace && existsSync(workspace.path) ? workspace.path : homedir()
+    const settings = this.store.get('settings')
+
+    let agent = this.agent(opts.agentId)
+    let accountId: string | undefined
+    let commandArgs: string[] = []
+    let title = 'Terminal'
+
+    if (opts.signInAccountId) {
+      const account = this.account(opts.signInAccountId)
+      if (!account) throw new Error('That account no longer exists.')
+      agent = this.agent(account.provider)
+      if (!agent?.installed) throw new Error(`Install ${account.provider === 'claude' ? 'Claude Code' : 'Codex'} first, then try signing in again.`)
+      accountId = account.id
+      commandArgs = account.provider === 'codex' ? ['login'] : []
+      title = `Sign in · ${account.name}`
+    } else if (agent) {
+      if (!agent.installed) throw new Error(`${agent.label} isn't installed on this PC.`)
+      if (agent.provider) accountId = this.resolveFor(agent.provider, workspace, opts.accountId)
+      title = agent.label
+    }
+    // "Terminal", "Terminal 2", … so panes are easy to tell apart.
+    const taken = new Set([...this.infos.values()].filter((i) => i.workspaceId === opts.workspaceId).map((i) => i.title))
+    if (taken.has(title)) {
+      let n = 2
+      while (taken.has(`${title} ${n}`)) n++
+      title = `${title} ${n}`
+    }
+
+    const launch = buildShellLaunch({
+      shell: settings.shell,
+      command: agent?.path,
+      commandArgs,
+      promptArg: agent?.acceptsPromptArg ? opts.initialPrompt : undefined
+    })
+    const id = this.ptys.create({
+      file: launch.file,
+      args: launch.args,
+      cwd,
+      env: { ...accountEnv(this.account(accountId)), AGENTDECK: '1' },
+      cols: opts.cols,
+      rows: opts.rows
+    })
+    const info: PtyInfo = {
+      id,
+      workspaceId: opts.workspaceId,
+      cwd,
+      agentId: agent?.id,
+      accountId,
+      title,
+      status: 'running',
+      startedAt: Date.now()
+    }
+    this.infos.set(id, info)
+    this.broadcastPtys()
+    return info
+  }
+
+  ptySnapshot(id: string): PtySnapshot {
+    return this.ptys.snapshot(id)
+  }
+
+  listPtys(): PtyInfo[] {
+    return [...this.infos.values()]
+  }
+
+  disposePty(id: string): void {
+    this.ptys.kill(id)
+    this.infos.delete(id)
+    this.limitTails.delete(id)
+    const timer = this.resumeTimers.get(id)
+    if (timer) clearTimeout(timer)
+    this.resumeTimers.delete(id)
+    this.broadcastPtys()
+  }
+
+  private broadcastPtys(): void {
+    this.send('pty:info', this.listPtys())
+  }
+
+  private watchForLimit(id: string, chunk: string): void {
+    const info = this.infos.get(id)
+    if (!info?.agentId || !agentById(info.agentId)?.provider || info.status === 'limited') return
+    const tail = ((this.limitTails.get(id) ?? '') + stripAnsi(chunk)).slice(-3000)
+    this.limitTails.set(id, tail)
+    const result = detectUsageLimit(tail)
+    if (!result.limited) return
+    this.limitTails.set(id, '')
+    const next: PtyInfo = { ...info, status: 'limited', resetAt: result.resetAt }
+    this.infos.set(id, next)
+    this.send('pty:limit', {
+      ptyId: id,
+      agentId: info.agentId,
+      accountId: info.accountId,
+      resetAt: result.resetAt,
+      message: tail.trim().split('\n').slice(-3).join('\n')
+    })
+    this.broadcastPtys()
+  }
+
+  // ---------- usage limits ----------
+
+  continueOnAccount(ptyId: string, accountId: string, cols: number, rows: number): PtyInfo {
+    const info = this.infos.get(ptyId)
+    if (!info?.agentId) throw new Error('This pane is not running an agent.')
+    const workspace = this.workspace(info.workspaceId)
+    const agent = this.agent(info.agentId)
+    const summary = this.threadForPty(ptyId)
+    const thread = summary ? this.getThread(summary.id) : null
+    const markdown = buildHandoffSummary({
+      workspaceName: workspace?.name ?? basename(info.cwd),
+      workspacePath: info.cwd,
+      agentLabel: agent?.label ?? info.agentId,
+      fromAccount: this.accountLabel(info.accountId),
+      messages: thread?.messages,
+      terminalTail: this.ptys.getBuffer(ptyId)
+    })
+    const dir = join(this.dataDir, 'handoffs')
+    mkdirSync(dir, { recursive: true })
+    const file = join(dir, `handoff-${new Date().toISOString().replace(/[:.]/g, '-')}.md`)
+    writeFileSync(file, markdown, 'utf8')
+
+    const next = this.createPty({
+      workspaceId: info.workspaceId,
+      agentId: info.agentId,
+      accountId,
+      initialPrompt: handoffPrompt(file),
+      cols,
+      rows
+    })
+    this.disposePty(ptyId)
+    return next
+  }
+
+  resumeLater(ptyId: string): void {
+    const info = this.infos.get(ptyId)
+    if (!info?.resetAt) return
+    const existing = this.resumeTimers.get(ptyId)
+    if (existing) clearTimeout(existing)
+    const delay = Math.max(0, info.resetAt - Date.now()) + 60000
+    this.resumeTimers.set(
+      ptyId,
+      setTimeout(() => {
+        this.resumeTimers.delete(ptyId)
+        if (!this.ptys.has(ptyId)) return
+        this.ptys.write(ptyId, 'continue\r')
+        this.dismissLimit(ptyId)
+      }, Math.min(delay, 2 ** 31 - 1))
+    )
+  }
+
+  dismissLimit(ptyId: string): void {
+    const info = this.infos.get(ptyId)
+    if (!info || info.status !== 'limited') return
+    this.infos.set(ptyId, { ...info, status: 'running', resetAt: undefined })
+    this.broadcastPtys()
+  }
+
+  // ---------- threads ----------
+
+  private transcriptRoots(): TranscriptRoot[] {
+    const roots: TranscriptRoot[] = [
+      { agent: 'claude', accountId: SYSTEM_ACCOUNT_ID, home: process.env.CLAUDE_CONFIG_DIR || join(homedir(), '.claude') },
+      { agent: 'codex', accountId: SYSTEM_ACCOUNT_ID, home: process.env.CODEX_HOME || join(homedir(), '.codex') }
+    ]
+    for (const a of this.store.get('accounts')) roots.push({ agent: a.provider, accountId: a.id, home: a.configDir })
+    return roots
+  }
+
+  listThreads(): ThreadSummary[] {
+    const entries = listThreads(this.transcriptRoots())
+    this.threadIndex.clear()
+    for (const e of entries) this.threadIndex.set(e.id, e)
+    return entries.map(({ file: _file, ...summary }) => summary)
+  }
+
+  getThread(id: string): Thread | null {
+    if (!this.threadIndex.has(id)) this.listThreads()
+    const entry = this.threadIndex.get(id)
+    return entry ? readThread(entry) : null
+  }
+
+  threadForPty(ptyId: string): ThreadSummary | null {
+    const info = this.infos.get(ptyId)
+    const provider = agentById(info?.agentId)?.provider
+    if (!info || !provider) return null
+    const accountId = info.accountId ?? SYSTEM_ACCOUNT_ID
+    return (
+      this.listThreads().find(
+        (t) =>
+          t.agent === provider &&
+          t.accountId === accountId &&
+          samePath(t.cwd || '.', info.cwd) &&
+          t.updatedAt >= info.startedAt - 60000
+      ) ?? null
+    )
+  }
+
+  // ---------- routines ----------
+
+  saveRoutine(routine: Routine): void {
+    const now = new Date()
+    const list = this.store.get('routines')
+    const previous = list.find((r) => r.id === routine.id)
+    const scheduleChanged = !previous || JSON.stringify(previous.schedule) !== JSON.stringify(routine.schedule)
+    const next: Routine = {
+      ...routine,
+      nextRunAt: scheduleChanged || !routine.nextRunAt ? nextRun(routine.schedule, now) : routine.nextRunAt
+    }
+    this.store.set('routines', previous ? list.map((r) => (r.id === next.id ? next : r)) : [...list, next])
+    this.broadcast()
+  }
+
+  removeRoutine(id: string): void {
+    this.store.update('routines', (list) => list.filter((r) => r.id !== id))
+    this.store.update('runs', (runs) => runs.filter((r) => r.routineId !== id))
+    this.broadcast()
+    this.broadcastRuns()
+  }
+
+  runRoutineNow(id: string): void {
+    void this.scheduler.runNow(id)
+  }
+
+  listRuns(): RunSummary[] {
+    return this.store.get('runs').map(({ output, ...rest }) => ({ ...rest, preview: output.slice(-400) }))
+  }
+
+  getRun(id: string): RoutineRun | null {
+    return this.store.get('runs').find((r) => r.id === id) ?? null
+  }
+
+  private saveRun(run: RoutineRun): void {
+    this.store.update('runs', (runs) => {
+      const without = runs.filter((r) => r.id !== run.id)
+      return [run, ...without].sort((a, b) => b.startedAt - a.startedAt).slice(0, MAX_RUNS)
+    })
+    this.broadcastRuns()
+  }
+
+  private broadcastRuns(): void {
+    this.send('routines:runs', this.listRuns())
+  }
+
+  private executeRoutine(routine: Routine, onOutput: (chunk: string) => void): Promise<{ exitCode: number; output: string }> {
+    const workspace = this.workspace(routine.workspaceId)
+    if (!workspace) return Promise.resolve({ exitCode: 1, output: 'The workspace for this routine was removed.' })
+    const agent = this.agent(routine.agentId)
+    if (!agent) return Promise.resolve({ exitCode: 1, output: 'Unknown agent.' })
+    const accountId = agent.provider ? this.resolveFor(agent.provider, workspace, routine.accountId) : undefined
+    return runHeadless({
+      agent,
+      cwd: workspace.path,
+      env: accountEnv(this.account(accountId)),
+      prompt: routine.prompt,
+      allowEdits: routine.allowEdits,
+      onOutput
+    }).catch((err: Error) => ({ exitCode: 1, output: err.message }))
+  }
+
+  // ---------- voice ----------
+
+  async enhancePrompt(text: string): Promise<string> {
+    const settings = this.store.get('settings')
+    const candidates = [settings.enhanceAgentId, 'claude', 'codex', 'gemini']
+    const agent = candidates.map((id) => this.agent(id)).find((a) => a?.installed && a.headless)
+    if (!agent) throw new Error('Enhance Prompt needs Claude Code, Codex or Gemini CLI installed.')
+    const accountId = agent.provider ? this.resolveFor(agent.provider, undefined) : undefined
+    const result = await runHeadless({
+      agent,
+      cwd: homedir(),
+      env: accountEnv(this.account(accountId)),
+      prompt: `${ENHANCE_INSTRUCTION}\n${text}`,
+      allowEdits: false,
+      timeoutMs: 120000
+    })
+    if (result.exitCode !== 0) throw new Error(stripAnsi(result.output).trim().slice(-400) || 'The agent could not rewrite the prompt.')
+    return stripAnsi(result.output).trim()
+  }
+
+  // ---------- lifecycle ----------
+
+  start(): void {
+    this.scheduler.normalise()
+    this.scheduler.start()
+  }
+
+  shutdown(): void {
+    this.scheduler.stop()
+    for (const t of this.resumeTimers.values()) clearTimeout(t)
+    this.ptys.disposeAll()
+    this.store.flush()
+  }
+}
