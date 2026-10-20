@@ -34,4 +34,10 @@ describe('push-to-talk', () => {
     expect(failed).toEqual({ phase: 'error', message: 'Microphone blocked' })
     expect(pttReducer(failed, { type: 'keyDown', at: 5000 })).toEqual({ phase: 'recording', startedAt: 5000 })
   })
+
+  it('goes back to idle when nothing was recorded (key released before the mic opened)', () => {
+    const s = run([{ type: 'keyDown', at: 0 }, { type: 'keyUp', at: 900 }, { type: 'cancelled' }])
+    expect(s).toEqual({ phase: 'idle' })
+    expect(pttReducer(s, { type: 'keyDown', at: 2000 })).toEqual({ phase: 'recording', startedAt: 2000 })
+  })
 })

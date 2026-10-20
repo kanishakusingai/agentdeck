@@ -42,4 +42,14 @@ describe('runHeadless', () => {
       runHeadless({ agent: { ...fakeAgent(), installed: false, path: undefined }, cwd: tmpdir(), env: {}, prompt: 'x', allowEdits: false })
     ).rejects.toThrow("isn't installed")
   })
+
+  it.runIf(isWin)('runs agents that are only installed as a PowerShell script', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'agentdeck ps1 agent '))
+    const path = join(dir, 'fake.ps1')
+    writeFileSync(path, 'Write-Output "ARGS: $args"\r\n$input | ForEach-Object { Write-Output $_ }\r\n')
+    const agent: DetectedAgent = { ...fakeAgent(), path }
+    const result = await runHeadless({ agent, cwd: tmpdir(), env: {}, prompt: 'hello from stdin', allowEdits: false })
+    expect(result.output).toContain('ARGS: -p')
+    expect(result.output).toContain('hello from stdin')
+  })
 })

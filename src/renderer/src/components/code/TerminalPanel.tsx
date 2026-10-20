@@ -48,14 +48,24 @@ export function TerminalPanel(props: IDockviewPanelProps) {
     return () => sub.dispose()
   }, [props.api])
 
-  // A restored layout points at a process from a previous session: start a fresh shell.
+  // A restored layout points at a process from a previous session: start it again.
+  // Agent panes reopen the agent's latest conversation in this folder.
   useEffect(() => {
     if ((ptyId && useApp.getState().ptys[ptyId]) || creating.current) return
     creating.current = true
+    const current = props.api.getParameters<PanelParams>()
+    const agent = useApp.getState().agents.find((a) => a.id === current.agentId && a.installed)
     window.api.pty
-      .create({ workspaceId: params.workspaceId, cols: 100, rows: 30 })
+      .create({
+        workspaceId: current.workspaceId,
+        agentId: agent?.id,
+        accountId: agent ? current.accountId : undefined,
+        resume: Boolean(agent),
+        cols: 100,
+        rows: 30
+      })
       .then((info) => {
-        setPanelPty(props, params, info)
+        setPanelPty(props, info)
         setPtyId(info.id)
       })
       .catch((err) => toast(errorText(err), 'error'))

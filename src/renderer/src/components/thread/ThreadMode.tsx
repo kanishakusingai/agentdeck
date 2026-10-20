@@ -1,6 +1,7 @@
 import { Loader2, MessagesSquare, PanelTopOpen, RefreshCw, Search } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import type { ThreadSummary } from '@shared/types'
+import { PROVIDERS } from '@shared/agents'
+import type { ThreadSummary, Workspace } from '@shared/types'
 import { openThreadPane } from '../../lib/canvas'
 import { cn, timeAgo } from '../../lib/cn'
 import { useApp } from '../../lib/store'
@@ -8,6 +9,16 @@ import { Button, EmptyState, IconButton, SectionLabel } from '../ui'
 import { ThreadView } from './ThreadView'
 
 const folderName = (p: string): string => p.split(/[\\/]/).filter(Boolean).pop() ?? p
+
+const norm = (p: string): string => p.replace(/[\\/]+$/, '').replace(/\//g, '\\').toLowerCase()
+
+/** The workspace a session belongs to: same folder or any subfolder (deepest match wins). */
+function workspaceFor(workspaces: Workspace[], cwd: string): Workspace | undefined {
+  const c = norm(cwd)
+  return workspaces
+    .filter((w) => c === norm(w.path) || c.startsWith(`${norm(w.path)}\\`))
+    .sort((a, b) => b.path.length - a.path.length)[0]
+}
 
 let cache: ThreadSummary[] | null = null
 
@@ -33,20 +44,29 @@ export function ThreadRail() {
   const query = useApp((s) => s.threadQuery)
   const selected = useApp((s) => s.selectedThreadId)
   const workspaces = useApp((s) => s.snapshot!.workspaces)
+  const [textMatches, setTextMatches] = useState<Set<string>>(new Set())
+
+  // Search inside conversations too (debounced; runs in the main process).
+  useEffect(() => {
+    const q = query.trim()
+    if (q.length < 2) return setTextMatches(new Set())
+    const t = setTimeout(() => void window.api.threads.search(q).then((ids) => setTextMatches(new Set(ids))), 250)
+    return () => clearTimeout(t)
+  }, [query, threads])
 
   const groups = useMemo(() => {
     const q = query.trim().toLowerCase()
-    const list = (threads ?? []).filter((t) => !q || t.title.toLowerCase().includes(q) || t.cwd.toLowerCase().includes(q))
+    const list = (threads ?? []).filter((t) => !q || t.title.toLowerCase().includes(q) || t.cwd.toLowerCase().includes(q) || textMatches.has(t.id))
     const map = new Map<string, { label: string; items: ThreadSummary[] }>()
     for (const t of list) {
-      const key = t.cwd.toLowerCase() || '(unknown folder)'
-      const ws = workspaces.find((w) => w.path.toLowerCase() === t.cwd.toLowerCase())
+      const ws = workspaceFor(workspaces, t.cwd)
+      const key = ws ? `ws:${ws.id}` : t.cwd.toLowerCase() || '(unknown folder)'
       const entry = map.get(key) ?? { label: ws?.name ?? (folderName(t.cwd) || 'Unknown folder'), items: [] }
       entry.items.push(t)
       map.set(key, entry)
     }
     return [...map.values()]
-  }, [threads, query, workspaces])
+  }, [threads, query, workspaces, textMatches])
 
   return (
     <nav aria-label="Threads" className="flex h-full flex-col">
@@ -88,7 +108,7 @@ export function ThreadRail() {
                   >
                     <span className={cn('line-clamp-2 text-sm leading-snug', selected === t.id ? 'text-fg' : 'text-fg-muted')}>{t.title}</span>
                     <span className="text-2xs text-fg-faint">
-                      {t.agent === 'claude' ? 'Claude Code' : 'Codex'} · {timeAgo(t.updatedAt)}
+                      {PROVIDERS[t.agent].agentLabel} · {timeAgo(t.updatedAt)}
                     </span>
                   </button>
                 </li>
@@ -115,7 +135,7 @@ export function ThreadMain() {
     )
   }
   const summary = cache?.find((t) => t.id === selected)
-  const ws = workspaces.find((w) => summary && w.path.toLowerCase() === summary.cwd.toLowerCase()) ?? workspaces.find((w) => w.id === activeWs)
+  const ws = (summary && workspaceFor(workspaces, summary.cwd)) ?? workspaces.find((w) => w.id === activeWs)
   return (
     <div className="flex h-full flex-col">
       <div className="flex h-10 shrink-0 items-center justify-end border-b border-line px-3">

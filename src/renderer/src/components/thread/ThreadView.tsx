@@ -1,5 +1,7 @@
 import { ChevronRight, Loader2, Wrench } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
+import { accountLabel } from '@shared/accounts'
+import { PROVIDERS } from '@shared/agents'
 import type { Thread, ThreadMessage } from '@shared/types'
 import { cn, formatTime } from '../../lib/cn'
 import { useApp } from '../../lib/store'
@@ -90,7 +92,7 @@ export function ThreadView({ threadId }: { threadId: string }) {
     )
   if (thread === null) return <EmptyState title="This thread is no longer on disk" body="The agent may have cleaned up its session files." />
 
-  const account = thread.accountId === 'system' ? 'System login' : (accounts.find((a) => a.id === thread.accountId)?.name ?? 'Account')
+  const account = accountLabel(accounts, thread.accountId)
 
   return (
     <div className="h-full overflow-y-auto">
@@ -98,7 +100,7 @@ export function ThreadView({ threadId }: { threadId: string }) {
         <header className="flex flex-col gap-1.5 border-b border-line pb-5">
           <h1 className="text-lg font-semibold leading-snug text-fg [user-select:text]">{thread.title}</h1>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-fg-muted">
-            <span>{thread.agent === 'claude' ? 'Claude Code' : 'Codex'}</span>
+            <span>{PROVIDERS[thread.agent].agentLabel}</span>
             <span className="text-fg-faint">·</span>
             <span>{account}</span>
             <span className="text-fg-faint">·</span>

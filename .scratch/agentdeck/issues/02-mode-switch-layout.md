@@ -4,8 +4,8 @@
 
 **Blocked by:** 01
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Switching mode swaps rail and main content
-- [ ] Mode persists across restarts
-- [ ] e2e: clicking each mode shows that mode's panel
+- [x] Switching mode swaps rail and main content
+- [x] Mode persists across restarts
+- [x] e2e: clicking each mode shows that mode's panel

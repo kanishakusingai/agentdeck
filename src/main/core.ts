@@ -3,7 +3,8 @@ import { existsSync, mkdirSync, rmSync, writeFileSync } from 'fs'
 import { homedir } from 'os'
 import { basename, join, resolve } from 'path'
 import type { AppSnapshot, PtySnapshot, RunSummary } from '@shared/api'
-import { agentById } from '@shared/agents'
+import { accountLabel } from '@shared/accounts'
+import { agentById, PROVIDERS } from '@shared/agents'
 import {
   SYSTEM_ACCOUNT_ID,
   type Account,
@@ -21,13 +22,14 @@ import {
 } from '@shared/types'
 import { accountEnv, resolveAccount } from './accounts'
 import { detectAgents } from './agents'
+import { asPastedMessage } from '@shared/paste'
 import { buildHandoffSummary, handoffPrompt } from './handoff'
 import { ENHANCE_INSTRUCTION, runHeadless } from './headless'
 import { buildShellLaunch } from './launch'
 import { PtyManager } from './pty-manager'
 import { nextRun, Scheduler } from './schedule'
 import { JsonStore } from './store'
-import { listThreads, readThread, type ThreadIndexEntry, type TranscriptRoot } from './transcripts'
+import { listThreads, readThread, searchThreads, type ThreadIndexEntry, type TranscriptRoot } from './transcripts'
 import { detectUsageLimit, stripAnsi } from './usage-limit'
 
 type Send = (channel: string, ...args: unknown[]) => void
@@ -43,6 +45,7 @@ export class AppCore {
   readonly scheduler: Scheduler
   private readonly infos = new Map<string, PtyInfo>()
   private readonly limitTails = new Map<string, string>()
+  private readonly limitMutedUntil = new Map<string, number>()
   private readonly resumeTimers = new Map<string, NodeJS.Timeout>()
   private readonly threadIndex = new Map<string, ThreadIndexEntry>()
   private agents: DetectedAgent[] | undefined
@@ -167,7 +170,7 @@ export class AppCore {
     const account: Account = {
       id,
       provider,
-      name: name.trim() || (provider === 'claude' ? 'Claude account' : 'Codex account'),
+      name: name.trim() || `${PROVIDERS[provider].label} account`,
       configDir: join(this.dataDir, 'accounts', id),
       createdAt: Date.now()
     }
@@ -221,7 +224,7 @@ export class AppCore {
   }
 
   accountLabel(id: string | undefined): string {
-    return !id || id === SYSTEM_ACCOUNT_ID ? 'System login' : (this.account(id)?.name ?? 'Unknown account')
+    return accountLabel(this.store.get('accounts'), id)
   }
 
   private resolveFor(provider: Provider, workspace: Workspace | undefined, explicit?: string): string {
@@ -250,13 +253,14 @@ export class AppCore {
       const account = this.account(opts.signInAccountId)
       if (!account) throw new Error('That account no longer exists.')
       agent = this.agent(account.provider)
-      if (!agent?.installed) throw new Error(`Install ${account.provider === 'claude' ? 'Claude Code' : 'Codex'} first, then try signing in again.`)
+      if (!agent?.installed) throw new Error(`Install ${PROVIDERS[account.provider].agentLabel} first, then try signing in again.`)
       accountId = account.id
-      commandArgs = account.provider === 'codex' ? ['login'] : []
+      commandArgs = PROVIDERS[account.provider].loginArgs
       title = `Sign in · ${account.name}`
     } else if (agent) {
       if (!agent.installed) throw new Error(`${agent.label} isn't installed on this PC.`)
       if (agent.provider) accountId = this.resolveFor(agent.provider, workspace, opts.accountId)
+      if (opts.resume && agent.resumeArgs) commandArgs = agent.resumeArgs
       title = agent.label
     }
     // "Terminal", "Terminal 2", … so panes are easy to tell apart.
@@ -267,12 +271,8 @@ export class AppCore {
       title = `${title} ${n}`
     }
 
-    const launch = buildShellLaunch({
-      shell: settings.shell,
-      command: agent?.path,
-      commandArgs,
-      promptArg: agent?.acceptsPromptArg ? opts.initialPrompt : undefined
-    })
+    // Only the detected executable path and fixed, app-defined arguments reach the shell.
+    const launch = buildShellLaunch({ shell: settings.shell, command: agent?.path, commandArgs })
     const id = this.ptys.create({
       file: launch.file,
       args: launch.args,
@@ -308,6 +308,7 @@ export class AppCore {
     this.ptys.kill(id)
     this.infos.delete(id)
     this.limitTails.delete(id)
+    this.limitMutedUntil.delete(id)
     const timer = this.resumeTimers.get(id)
     if (timer) clearTimeout(timer)
     this.resumeTimers.delete(id)
@@ -321,9 +322,12 @@ export class AppCore {
   private watchForLimit(id: string, chunk: string): void {
     const info = this.infos.get(id)
     if (!info?.agentId || !agentById(info.agentId)?.provider || info.status === 'limited') return
+    if ((this.limitMutedUntil.get(id) ?? 0) > Date.now()) return
     const tail = ((this.limitTails.get(id) ?? '') + stripAnsi(chunk)).slice(-3000)
     this.limitTails.set(id, tail)
-    const result = detectUsageLimit(tail)
+    // CLIs print the limit notice as their latest status, so only look at the end of
+    // the output; this avoids false alarms when an agent merely reads text about limits.
+    const result = detectUsageLimit(tail.slice(-600))
     if (!result.limited) return
     this.limitTails.set(id, '')
     const next: PtyInfo = { ...info, status: 'limited', resetAt: result.resetAt }
@@ -360,16 +364,33 @@ export class AppCore {
     const file = join(dir, `handoff-${new Date().toISOString().replace(/[:.]/g, '-')}.md`)
     writeFileSync(file, markdown, 'utf8')
 
-    const next = this.createPty({
-      workspaceId: info.workspaceId,
-      agentId: info.agentId,
-      accountId,
-      initialPrompt: handoffPrompt(file),
-      cols,
-      rows
-    })
-    this.disposePty(ptyId)
+    // The old pane stays open (with its scrollback) so nothing is lost.
+    const next = this.createPty({ workspaceId: info.workspaceId, agentId: info.agentId, accountId, cols, rows })
+    this.dismissLimit(ptyId)
+    // Type the handoff into the agent once its UI has settled — never via the command line.
+    this.typeWhenReady(next.id, asPastedMessage(handoffPrompt(file)))
     return next
+  }
+
+  /** Write a message into an agent's input after its startup output goes quiet. */
+  private typeWhenReady(ptyId: string, message: string, quietMs = 2500, maxMs = 30000): void {
+    let quiet: NodeJS.Timeout | undefined
+    const started = Date.now()
+    const send = (): void => {
+      this.ptys.off('data', onData)
+      clearTimeout(quiet)
+      clearTimeout(cap)
+      if (!this.ptys.has(ptyId)) return
+      this.ptys.write(ptyId, message)
+      setTimeout(() => this.ptys.write(ptyId, '\r'), 150)
+    }
+    const onData = (id: string): void => {
+      if (id !== ptyId) return
+      clearTimeout(quiet)
+      quiet = setTimeout(send, Math.max(0, Math.min(quietMs, maxMs - (Date.now() - started))))
+    }
+    const cap = setTimeout(send, maxMs)
+    this.ptys.on('data', onData)
   }
 
   resumeLater(ptyId: string): void {
@@ -392,6 +413,9 @@ export class AppCore {
   dismissLimit(ptyId: string): void {
     const info = this.infos.get(ptyId)
     if (!info || info.status !== 'limited') return
+    // Terminals repaint old output on resize, which would re-trigger the same notice.
+    this.limitMutedUntil.set(ptyId, Date.now() + 30 * 60000)
+    this.limitTails.set(ptyId, '')
     this.infos.set(ptyId, { ...info, status: 'running', resetAt: undefined })
     this.broadcastPtys()
   }
@@ -399,12 +423,19 @@ export class AppCore {
   // ---------- threads ----------
 
   private transcriptRoots(): TranscriptRoot[] {
-    const roots: TranscriptRoot[] = [
-      { agent: 'claude', accountId: SYSTEM_ACCOUNT_ID, home: process.env.CLAUDE_CONFIG_DIR || join(homedir(), '.claude') },
-      { agent: 'codex', accountId: SYSTEM_ACCOUNT_ID, home: process.env.CODEX_HOME || join(homedir(), '.codex') }
-    ]
+    const roots: TranscriptRoot[] = (Object.keys(PROVIDERS) as Provider[]).map((p) => ({
+      agent: p,
+      accountId: SYSTEM_ACCOUNT_ID,
+      home: process.env[PROVIDERS[p].homeEnv] || join(homedir(), PROVIDERS[p].defaultHome)
+    }))
     for (const a of this.store.get('accounts')) roots.push({ agent: a.provider, accountId: a.id, home: a.configDir })
     return roots
+  }
+
+  /** Ids of threads whose conversation text contains the query. */
+  searchThreads(query: string): string[] {
+    if (this.threadIndex.size === 0) this.listThreads()
+    return searchThreads([...this.threadIndex.values()], query)
   }
 
   listThreads(): ThreadSummary[] {
@@ -471,6 +502,8 @@ export class AppCore {
   }
 
   private saveRun(run: RoutineRun): void {
+    // A run that finishes after its routine was deleted is dropped, not resurrected.
+    if (!this.store.get('routines').some((r) => r.id === run.routineId)) return
     this.store.update('runs', (runs) => {
       const without = runs.filter((r) => r.id !== run.id)
       return [run, ...without].sort((a, b) => b.startedAt - a.startedAt).slice(0, MAX_RUNS)

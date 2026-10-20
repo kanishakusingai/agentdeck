@@ -4,7 +4,7 @@
 
 **Blocked by:** 07, 09, 10, 11, 12
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] e2e walkthrough of all three modes with screenshots
-- [ ] `npm run dist` produces an NSIS installer in `release/`
+- [x] e2e walkthrough of all three modes with screenshots
+- [x] `npm run dist` produces an NSIS installer in `release/`

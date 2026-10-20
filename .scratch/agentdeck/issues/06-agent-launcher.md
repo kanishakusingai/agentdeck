@@ -4,7 +4,7 @@
 
 **Blocked by:** 05
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Detector test with a fake PATH
-- [ ] Menu shows installed agents, greys out missing ones
+- [x] Detector test with a fake PATH
+- [x] Menu shows installed agents, greys out missing ones

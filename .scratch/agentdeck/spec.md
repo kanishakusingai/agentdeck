@@ -1,6 +1,6 @@
 # Spec: AgentDeck — personal agent super app
 
-Status: ready-for-agent
+Status: done
 
 ## Problem Statement
 
@@ -120,3 +120,15 @@ Sign-up/login to AgentDeck, billing, credits, cloud sync, marketing site, auto-u
 ## Further Notes
 
 The user is not a developer: every empty state and error must say plainly what to do next. No screenshots of BridgeMind were available; visual direction comes from the site's description (dark, dense, calm, terminal-first).
+
+## Decisions made during implementation
+
+Recorded after `/code-review`; each was a deliberate call, not drift.
+
+- **No user text on command lines.** Terminal panes start agents with only the detected executable path and fixed, app-defined arguments. The handoff prompt is typed into the agent's input once its UI settles, never passed as an argument.
+- **Continue on another account opens a new pane** beside the limited one, so the old scrollback stays readable.
+- **Restored agent panes resume.** After a restart, an agent pane relaunches its agent with the CLI's own "continue latest conversation" flag (`claude --continue`, `codex resume --last`); plain terminals come back as fresh shells.
+- **Usage-limit detection** only looks at the last ~600 characters of output, and a dismissed notice stays quiet for 30 minutes for that pane.
+- **Thread search** matches titles, folders and conversation text; threads group under a workspace when their folder is the workspace or any subfolder.
+- **Extras kept:** a speech-model picker (tiny/base/small, default base.en), an Enhance Prompt agent picker that may fall back to Gemini CLI, removing an account deletes its sign-in folder (after confirmation), removing a workspace pauses its routines.
+- **Docked browser** runs in its own session partition with no device/location permissions.

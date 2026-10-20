@@ -11,6 +11,8 @@ export type PttEvent =
   | { type: 'keyUp'; at: number }
   | { type: 'transcribed'; text: string }
   | { type: 'failed'; message: string }
+  /** Nothing was captured (e.g. released before the microphone opened). */
+  | { type: 'cancelled' }
 
 /** Shorter presses are treated as accidental taps. */
 export const MIN_RECORDING_MS = 300
@@ -28,5 +30,7 @@ export function pttReducer(state: PttState, event: PttEvent): PttState {
       return state.phase === 'transcribing' ? { phase: 'idle', lastText: event.text } : state
     case 'failed':
       return { phase: 'error', message: event.message }
+    case 'cancelled':
+      return { phase: 'idle' }
   }
 }

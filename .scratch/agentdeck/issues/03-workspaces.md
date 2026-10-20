@@ -4,8 +4,8 @@
 
 **Blocked by:** 02
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Add / rename / remove from the rail
-- [ ] Persisted in the store
-- [ ] Clear empty state when there are no workspaces
+- [x] Add / rename / remove from the rail
+- [x] Persisted in the store
+- [x] Clear empty state when there are no workspaces

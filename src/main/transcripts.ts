@@ -1,5 +1,6 @@
-import { existsSync, readdirSync, readFileSync, statSync } from 'fs'
+import { closeSync, existsSync, openSync, readdirSync, readFileSync, readSync, statSync } from 'fs'
 import { join } from 'path'
+import { PROVIDERS } from '@shared/agents'
 import type { Thread, ThreadAgent, ThreadMessage, ThreadSummary } from '@shared/types'
 
 interface Parsed {
@@ -124,10 +125,17 @@ function walkJsonl(dir: string, depth: number, out: string[]): void {
 export const parserFor = (agent: ThreadAgent): ((raw: string) => Parsed) =>
   agent === 'claude' ? parseClaudeTranscript : parseCodexTranscript
 
-/** Read just enough of a file to find its title and folder. */
+/** Read only the first `bytes` of a file (enough for its title and folder), cut at a line end. */
 function readHead(file: string, bytes = 256 * 1024): string {
-  const raw = readFileSync(file, 'utf8')
-  return raw.length > bytes ? raw.slice(0, raw.lastIndexOf('\n', bytes)) : raw
+  const fd = openSync(file, 'r')
+  try {
+    const buf = Buffer.alloc(bytes)
+    const n = readSync(fd, buf, 0, bytes, 0)
+    const text = buf.subarray(0, n).toString('utf8')
+    return n < bytes ? text : text.slice(0, Math.max(0, text.lastIndexOf('\n')))
+  } finally {
+    closeSync(fd)
+  }
 }
 
 export interface ThreadIndexEntry extends ThreadSummary {
@@ -150,10 +158,11 @@ function summarise(file: string, agent: ThreadAgent, mtime: number, size: number
 export function listThreads(roots: TranscriptRoot[], limit = 300): ThreadIndexEntry[] {
   const found: { file: string; root: TranscriptRoot; mtime: number; size: number }[] = []
   for (const root of roots) {
-    const base = join(root.home, root.agent === 'claude' ? 'projects' : 'sessions')
+    const layout = PROVIDERS[root.agent].transcripts
+    const base = join(root.home, layout.dir)
     if (!existsSync(base)) continue
     const files: string[] = []
-    walkJsonl(base, root.agent === 'claude' ? 1 : 4, files)
+    walkJsonl(base, layout.depth, files)
     for (const file of files) {
       try {
         const st = statSync(file)
@@ -192,4 +201,34 @@ export function readThread(entry: ThreadIndexEntry): Thread {
   const parsed = parserFor(entry.agent)(readFileSync(entry.file, 'utf8'))
   const { file: _file, ...summary } = entry
   return { ...summary, cwd: parsed.cwd || entry.cwd, title: parsed.title, messages: parsed.messages }
+}
+
+// Lower-cased conversation text per file, reused while the file is unchanged.
+const textCache = new Map<string, { mtime: number; size: number; text: string }>()
+const MAX_SEARCH_TEXT = 400_000
+
+function conversationText(entry: ThreadIndexEntry): string {
+  const cached = textCache.get(entry.file)
+  if (cached && cached.mtime === entry.updatedAt && cached.size === entry.sizeBytes) return cached.text
+  let text = ''
+  try {
+    const parsed = parserFor(entry.agent)(readFileSync(entry.file, 'utf8'))
+    text = parsed.messages
+      .filter((m) => m.role !== 'tool')
+      .map((m) => m.text)
+      .join('\n')
+      .toLowerCase()
+      .slice(0, MAX_SEARCH_TEXT)
+  } catch {
+    /* unreadable */
+  }
+  textCache.set(entry.file, { mtime: entry.updatedAt, size: entry.sizeBytes, text })
+  return text
+}
+
+/** Ids of threads whose prompts or replies contain the query (case-insensitive). */
+export function searchThreads(entries: ThreadIndexEntry[], query: string): string[] {
+  const q = query.trim().toLowerCase()
+  if (q.length < 2) return []
+  return entries.filter((e) => conversationText(e).includes(q)).map((e) => e.id)
 }

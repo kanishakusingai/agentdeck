@@ -5,6 +5,7 @@
 - **Terminal pane**: a live shell (PTY) whose cwd is the workspace folder.
 - **Agent**: a CLI coding tool on PATH (Claude Code, Codex, Gemini CLI, …). Launching an agent opens a terminal pane running it.
 - **Account**: a named sign-in for an agent provider (Claude or Codex), isolated in its own config folder. The app never reads or stores tokens.
+- **System login**: the pseudo-account meaning "whatever the provider CLI is normally signed into on this PC" (no config-folder override).
 - **Default account**: the account new agents use unless a workspace or pane overrides it.
 - **Usage limit**: the provider message saying an account is out of quota. Becomes a choice: resume later or continue on another account.
 - **Handoff summary**: a markdown file summarising a conversation, used to continue it on another account.

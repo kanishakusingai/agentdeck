@@ -1,15 +1,15 @@
 import { ArrowUp, Loader2, Mic, Sparkles } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
+import { asPastedMessage } from '@shared/paste'
 import { activeTerminalPtyId } from '../../lib/canvas'
 import { cn } from '../../lib/cn'
 import { errorText, toast, useApp } from '../../lib/store'
 import { registerComposer, toggleRecording, useVoice } from '../../voice/dictation'
 import { IconButton, Kbd, Tip } from '../ui'
 
-/** Send text to an agent's terminal as one message (bracketed paste keeps newlines together). */
+/** Send text to an agent's terminal as one message, then press Enter. */
 function sendToPty(ptyId: string, text: string): void {
-  const body = text.includes('\n') ? `\u001b[200~${text}\u001b[201~` : text
-  window.api.pty.write(ptyId, body)
+  window.api.pty.write(ptyId, asPastedMessage(text))
   setTimeout(() => window.api.pty.write(ptyId, '\r'), 60)
 }
 

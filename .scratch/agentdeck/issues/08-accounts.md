@@ -4,8 +4,8 @@
 
 **Blocked by:** 06
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Resolution test: pane > workspace > default > System
-- [ ] Env test: CLAUDE_CONFIG_DIR / CODEX_HOME set at spawn
-- [ ] Tokens never read
+- [x] Resolution test: pane > workspace > default > System
+- [x] Env test: CLAUDE_CONFIG_DIR / CODEX_HOME set at spawn
+- [x] Tokens never read

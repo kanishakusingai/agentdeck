@@ -30,11 +30,14 @@ export function runHeadless(input: HeadlessInput): Promise<HeadlessResult> {
   const isWin = process.platform === 'win32'
   // .cmd/.bat shims need cmd.exe on Windows; quote the path because it can contain spaces.
   const needsShell = isWin && /\.(cmd|bat)$/i.test(agent.path)
-  const command = needsShell ? `"${agent.path}"` : agent.path
+  // .ps1-only installs go through PowerShell, which forwards stdin to the script.
+  const isPs1 = isWin && /\.ps1$/i.test(agent.path)
+  const command = isPs1 ? 'powershell.exe' : needsShell ? `"${agent.path}"` : agent.path
+  const argv = isPs1 ? ['-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', agent.path, ...args] : args
 
   return new Promise((resolve) => {
     let output = ''
-    const child = spawn(command, args, {
+    const child = spawn(command, argv, {
       cwd,
       env: { ...process.env, ...env, NO_COLOR: '1', FORCE_COLOR: '0' },
       shell: needsShell,

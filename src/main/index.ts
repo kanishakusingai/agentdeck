@@ -1,12 +1,13 @@
 import { app, BrowserWindow, dialog, ipcMain, session, shell, type WebContents } from 'electron'
 import { join } from 'path'
-import type { Provider, PtyCreateOptions, Routine, Settings, UiState } from '@shared/types'
+import type { InvokeChannels, SendChannels } from '@shared/api'
 import { AppCore } from './core'
 
 // Tests run against a throwaway data folder.
 if (process.env.AGENTDECK_USER_DATA) app.setPath('userData', process.env.AGENTDECK_USER_DATA)
 
 const BG = '#0b0d10'
+const BROWSER_PARTITION = 'persist:agentdeck-browser'
 let mainWindow: BrowserWindow | null = null
 let core: AppCore
 
@@ -64,12 +65,13 @@ function createWindow(): void {
     if (!(dev && url.startsWith(dev))) event.preventDefault()
   })
 
-  // Docked browser panes: no Node, no preload, http(s) only.
+  // Docked browser panes: no Node, no preload, own locked-down session, http(s) only.
   mainWindow.webContents.on('will-attach-webview', (event, webPreferences, params) => {
     delete webPreferences.preload
     webPreferences.nodeIntegration = false
     webPreferences.contextIsolation = true
     webPreferences.sandbox = true
+    webPreferences.partition = BROWSER_PARTITION
     if (!isHttpUrl(params.src) && params.src !== 'about:blank') event.preventDefault()
   })
   mainWindow.webContents.on('did-attach-webview', (_event, contents) => hardenWebContents(contents))
@@ -90,6 +92,11 @@ function setupPermissions(): void {
   session.defaultSession.setPermissionCheckHandler((contents, permission) => {
     return contents === mainWindow?.webContents && allowed.has(permission)
   })
+  // Websites in the docked browser get no device or location access at all.
+  const browser = session.fromPartition(BROWSER_PARTITION)
+  const browserAllowed = new Set(['clipboard-sanitized-write', 'fullscreen'])
+  browser.setPermissionRequestHandler((_contents, permission, callback) => callback(browserAllowed.has(permission)))
+  browser.setPermissionCheckHandler((_contents, permission) => browserAllowed.has(permission))
 }
 
 async function pickFolder(): Promise<string | null> {
@@ -102,64 +109,71 @@ async function pickFolder(): Promise<string | null> {
 }
 
 function registerIpc(): void {
-  const handle = (channel: string, fn: (...args: never[]) => unknown): void => {
-    ipcMain.handle(channel, (_event, ...args) => (fn as (...a: unknown[]) => unknown)(...args))
+  type Handler<C extends keyof InvokeChannels> = (
+    ...args: Parameters<InvokeChannels[C]>
+  ) => ReturnType<InvokeChannels[C]> | Promise<ReturnType<InvokeChannels[C]>>
+  const handle = <C extends keyof InvokeChannels>(channel: C, fn: Handler<C>): void => {
+    ipcMain.handle(channel, (_event, ...args) => fn(...(args as Parameters<InvokeChannels[C]>)))
+  }
+  const listen = <C extends keyof SendChannels>(channel: C, fn: SendChannels[C]): void => {
+    ipcMain.on(channel, (_event, ...args) => (fn as (...a: unknown[]) => void)(...args))
   }
 
   handle('app:getSnapshot', () => core.snapshot())
   handle('app:getLayouts', () => core.getLayouts())
-  handle('app:setLayout', (id: string, layout: unknown) => core.setLayout(id, layout))
-  handle('app:setUi', (ui: UiState) => core.setUi(ui))
-  handle('app:setSettings', (s: Settings) => core.setSettings(s))
-  handle('app:openExternal', (url: string) => (isHttpUrl(url) ? shell.openExternal(url) : undefined))
+  handle('app:setLayout', (id, layout) => core.setLayout(id, layout))
+  handle('app:setUi', (ui) => core.setUi(ui))
+  handle('app:setSettings', (s) => core.setSettings(s))
+  handle('app:openExternal', async (url) => {
+    if (isHttpUrl(url)) await shell.openExternal(url)
+  })
 
   handle('workspaces:add', async () => {
     const folder = await pickFolder()
     return folder ? core.addWorkspace(folder) : null
   })
-  handle('workspaces:rename', (id: string, name: string) => core.renameWorkspace(id, name))
-  handle('workspaces:remove', (id: string) => core.removeWorkspace(id))
-  handle('workspaces:setAccountOverride', (id: string, p: Provider, a: string | null) => core.setAccountOverride(id, p, a))
-  handle('workspaces:reveal', (id: string) => {
+  handle('workspaces:rename', (id, name) => core.renameWorkspace(id, name))
+  handle('workspaces:remove', (id) => core.removeWorkspace(id))
+  handle('workspaces:setAccountOverride', (id, p, a) => core.setAccountOverride(id, p, a))
+  handle('workspaces:reveal', (id) => {
     const ws = core.workspace(id)
     if (ws) void shell.openPath(ws.path)
   })
 
   handle('agents:detect', () => core.detectAgents(true))
 
-  handle('pty:create', (opts: PtyCreateOptions) => core.createPty(opts))
-  handle('pty:dispose', (id: string) => core.disposePty(id))
-  handle('pty:snapshot', (id: string) => core.ptySnapshot(id))
+  handle('pty:create', (opts) => core.createPty(opts))
+  handle('pty:dispose', (id) => core.disposePty(id))
+  handle('pty:snapshot', (id) => core.ptySnapshot(id))
   handle('pty:list', () => core.listPtys())
-  ipcMain.on('pty:write', (_e, id: string, data: string) => core.ptys.write(id, data))
-  ipcMain.on('pty:resize', (_e, id: string, cols: number, rows: number) => core.ptys.resize(id, cols, rows))
+  listen('pty:write', (id, data) => core.ptys.write(id, data))
+  listen('pty:resize', (id, cols, rows) => core.ptys.resize(id, cols, rows))
 
-  handle('accounts:add', (p: Provider, name: string) => core.addAccount(p, name))
-  handle('accounts:rename', (id: string, name: string) => core.renameAccount(id, name))
-  handle('accounts:remove', (id: string) => core.removeAccount(id))
-  handle('accounts:setDefault', (p: Provider, id: string | null) => core.setDefaultAccount(p, id))
-  handle('accounts:reveal', (id: string) => {
+  handle('accounts:add', (p, name) => core.addAccount(p, name))
+  handle('accounts:rename', (id, name) => core.renameAccount(id, name))
+  handle('accounts:remove', (id) => core.removeAccount(id))
+  handle('accounts:setDefault', (p, id) => core.setDefaultAccount(p, id))
+  handle('accounts:reveal', (id) => {
     const dir = core.accountDir(id)
     if (dir) void shell.openPath(dir)
   })
 
   handle('threads:list', () => core.listThreads())
-  handle('threads:get', (id: string) => core.getThread(id))
-  handle('threads:forPty', (id: string) => core.threadForPty(id))
+  handle('threads:get', (id) => core.getThread(id))
+  handle('threads:forPty', (id) => core.threadForPty(id))
+  handle('threads:search', (query) => core.searchThreads(String(query ?? '')))
 
-  handle('routines:save', (r: Routine) => core.saveRoutine(r))
-  handle('routines:remove', (id: string) => core.removeRoutine(id))
-  handle('routines:runNow', (id: string) => core.runRoutineNow(id))
+  handle('routines:save', (r) => core.saveRoutine(r))
+  handle('routines:remove', (id) => core.removeRoutine(id))
+  handle('routines:runNow', (id) => core.runRoutineNow(id))
   handle('routines:listRuns', () => core.listRuns())
-  handle('routines:getRun', (id: string) => core.getRun(id))
+  handle('routines:getRun', (id) => core.getRun(id))
 
-  handle('limits:continueOnAccount', (ptyId: string, accountId: string, cols: number, rows: number) =>
-    core.continueOnAccount(ptyId, accountId, cols, rows)
-  )
-  handle('limits:resumeLater', (id: string) => core.resumeLater(id))
-  handle('limits:dismiss', (id: string) => core.dismissLimit(id))
+  handle('limits:continueOnAccount', (ptyId, accountId, cols, rows) => core.continueOnAccount(ptyId, accountId, cols, rows))
+  handle('limits:resumeLater', (id) => core.resumeLater(id))
+  handle('limits:dismiss', (id) => core.dismissLimit(id))
 
-  handle('voice:enhance', (text: string) => core.enhancePrompt(String(text ?? '')))
+  handle('voice:enhance', (text) => core.enhancePrompt(String(text ?? '')))
 }
 
 if (!app.requestSingleInstanceLock()) {

@@ -4,7 +4,7 @@
 
 **Blocked by:** 08, 10
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Detector test with literal Claude/Codex limit messages
-- [ ] Handoff summary written and referenced in the new agent's prompt
+- [x] Detector test with literal Claude/Codex limit messages
+- [x] Handoff summary written and referenced in the new agent's prompt

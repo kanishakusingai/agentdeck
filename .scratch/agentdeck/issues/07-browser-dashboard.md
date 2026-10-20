@@ -4,7 +4,7 @@
 
 **Blocked by:** 06
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Dashboard updates when panes start and exit
-- [ ] Browser pane usable in sidebar and on canvas
+- [x] Dashboard updates when panes start and exit
+- [x] Browser pane usable in sidebar and on canvas

@@ -1,18 +1,24 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
-import type { AgentDeckApi, Unsubscribe } from '@shared/api'
+import type { AgentDeckApi, EventChannels, InvokeChannels, SendChannels, Unsubscribe } from '@shared/api'
 
-const call =
-  (channel: string) =>
-  (...args: unknown[]) =>
-    ipcRenderer.invoke(channel, ...args)
-
-function on<A extends unknown[]>(channel: string, cb: (...args: A) => void): Unsubscribe {
-  const listener = (_e: IpcRendererEvent, ...args: unknown[]): void => cb(...(args as A))
-  ipcRenderer.on(channel, listener)
-  return () => ipcRenderer.removeListener(channel, listener)
+function call<C extends keyof InvokeChannels>(channel: C) {
+  return (...args: Parameters<InvokeChannels[C]>) => ipcRenderer.invoke(channel, ...args) as Promise<ReturnType<InvokeChannels[C]>>
 }
 
-const api: AgentDeckApi = {
+function send<C extends keyof SendChannels>(channel: C) {
+  return (...args: Parameters<SendChannels[C]>): void => ipcRenderer.send(channel, ...args)
+}
+
+function on<C extends keyof EventChannels>(channel: C) {
+  return (cb: EventChannels[C]): Unsubscribe => {
+    const listener = (_e: IpcRendererEvent, ...args: unknown[]): void =>
+      (cb as (...a: unknown[]) => void)(...args)
+    ipcRenderer.on(channel, listener)
+    return () => ipcRenderer.removeListener(channel, listener)
+  }
+}
+
+const api = {
   platform: process.platform,
   app: {
     getSnapshot: call('app:getSnapshot'),
@@ -21,7 +27,7 @@ const api: AgentDeckApi = {
     setUi: call('app:setUi'),
     setSettings: call('app:setSettings'),
     openExternal: call('app:openExternal'),
-    onSnapshot: (cb) => on('app:snapshot', cb)
+    onSnapshot: on('app:snapshot')
   },
   workspaces: {
     add: call('workspaces:add'),
@@ -36,14 +42,14 @@ const api: AgentDeckApi = {
   pty: {
     create: call('pty:create'),
     // Keystrokes and resizes are fire-and-forget for low latency.
-    write: (id, data) => ipcRenderer.send('pty:write', id, data),
-    resize: (id, cols, rows) => ipcRenderer.send('pty:resize', id, cols, rows),
+    write: send('pty:write'),
+    resize: send('pty:resize'),
     dispose: call('pty:dispose'),
     snapshot: call('pty:snapshot'),
     list: call('pty:list'),
-    onData: (cb) => on('pty:data', cb),
-    onInfo: (cb) => on('pty:info', cb),
-    onLimit: (cb) => on('pty:limit', cb)
+    onData: on('pty:data'),
+    onInfo: on('pty:info'),
+    onLimit: on('pty:limit')
   },
   accounts: {
     add: call('accounts:add'),
@@ -55,7 +61,8 @@ const api: AgentDeckApi = {
   threads: {
     list: call('threads:list'),
     get: call('threads:get'),
-    forPty: call('threads:forPty')
+    forPty: call('threads:forPty'),
+    search: call('threads:search')
   },
   routines: {
     save: call('routines:save'),
@@ -63,7 +70,7 @@ const api: AgentDeckApi = {
     runNow: call('routines:runNow'),
     listRuns: call('routines:listRuns'),
     getRun: call('routines:getRun'),
-    onRuns: (cb) => on('routines:runs', cb)
+    onRuns: on('routines:runs')
   },
   limits: {
     continueOnAccount: call('limits:continueOnAccount'),
@@ -73,6 +80,6 @@ const api: AgentDeckApi = {
   voice: {
     enhance: call('voice:enhance')
   }
-} as AgentDeckApi
+} satisfies AgentDeckApi
 
 contextBridge.exposeInMainWorld('api', api)

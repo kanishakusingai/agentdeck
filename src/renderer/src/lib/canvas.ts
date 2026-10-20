@@ -8,6 +8,8 @@ export interface PanelParams {
   kind: PanelKind
   workspaceId: string
   ptyId?: string
+  agentId?: string
+  accountId?: string
   url?: string
   threadId?: string
 }
@@ -35,20 +37,28 @@ function publish(workspaceId: string): void {
 export function registerCanvas(workspaceId: string, api: DockviewApi): () => void {
   canvases.set(workspaceId, api)
   let saveTimer: ReturnType<typeof setTimeout> | undefined
+  const saveNow = (): void => {
+    clearTimeout(saveTimer)
+    void window.api.app.setLayout(workspaceId, api.toJSON())
+  }
   const subs = [
     api.onDidLayoutChange(() => {
       publish(workspaceId)
+      // Resizes fire constantly: save them shortly after they settle.
       clearTimeout(saveTimer)
-      saveTimer = setTimeout(() => void window.api.app.setLayout(workspaceId, api.toJSON()), 400)
+      saveTimer = setTimeout(saveNow, 400)
     }),
     api.onDidAddPanel((panel) => {
       publish(workspaceId)
       panel.api.onDidTitleChange(() => publish(workspaceId))
+      if (!rearranging) saveNow()
     }),
     api.onDidRemovePanel((panel) => {
       publish(workspaceId)
       const params = paramsOf(panel)
-      if (!rearranging && params.kind === 'terminal' && params.ptyId) void window.api.pty.dispose(params.ptyId)
+      if (rearranging) return
+      if (params.kind === 'terminal' && params.ptyId) void window.api.pty.dispose(params.ptyId)
+      saveNow()
     }),
     api.onDidActivePanelChange(({ panel }) => {
       if (panel) useApp.setState({ activePanel: { workspaceId, panelId: panel.id } })
@@ -107,16 +117,33 @@ export async function openTerminal(opts: OpenTerminalOptions): Promise<PtyInfo |
   }
   rememberPty(info)
   const api = await whenCanvas(opts.workspaceId)
-  const params: PanelParams = { kind: 'terminal', workspaceId: opts.workspaceId, ptyId: info.id }
+  addTerminalPanel(api, info, placement(api, direction, referencePanel))
+  return info
+}
+
+function terminalParams(info: PtyInfo): PanelParams {
+  // agentId/accountId are kept so a restored layout can bring the agent back.
+  return { kind: 'terminal', workspaceId: info.workspaceId, ptyId: info.id, agentId: info.agentId, accountId: info.accountId }
+}
+
+function addTerminalPanel(api: DockviewApi, info: PtyInfo, position: ReturnType<typeof placement>): void {
   api.addPanel({
     id: `term-${info.id}`,
     component: 'terminal',
     title: info.title,
-    params: params as unknown as Record<string, unknown>,
+    params: terminalParams(info) as unknown as Record<string, unknown>,
     renderer: 'always',
-    position: placement(api, direction, referencePanel)
+    position
   })
-  return info
+}
+
+/** Show a new terminal process right of an existing pane (account switch keeps the old one). */
+export function openPtyBeside(existingPtyId: string, info: PtyInfo): void {
+  rememberPty(info)
+  const found = findPtyPanel(existingPtyId)
+  const api = canvases.get(found?.workspaceId ?? info.workspaceId)
+  if (!api) return
+  addTerminalPanel(api, info, found ? { referencePanel: found.panel.id, direction: 'right' } : placement(api))
 }
 
 export async function openBrowserPane(workspaceId: string, url: string): Promise<void> {
@@ -175,19 +202,9 @@ export function rememberPty(info: PtyInfo): void {
   useApp.setState((s) => ({ ptys: { ...s.ptys, [info.id]: info } }))
 }
 
-/** Point an existing pane at a new terminal process (account switch). */
-export function swapPty(oldPtyId: string, next: PtyInfo): void {
-  rememberPty(next)
-  const found = findPtyPanel(oldPtyId)
-  if (!found) return
-  found.panel.api.updateParameters({ ...paramsOf(found.panel), ptyId: next.id })
-  found.panel.api.setTitle(next.title)
-  publish(found.workspaceId)
-}
-
-export function setPanelPty(panel: { api: { updateParameters(p: Record<string, unknown>): void; setTitle(t: string): void } }, params: PanelParams, info: PtyInfo): void {
+export function setPanelPty(panel: { api: { updateParameters(p: Record<string, unknown>): void; setTitle(t: string): void } }, info: PtyInfo): void {
   rememberPty(info)
-  panel.api.updateParameters({ ...params, ptyId: info.id } as unknown as Record<string, unknown>)
+  panel.api.updateParameters(terminalParams(info) as unknown as Record<string, unknown>)
   panel.api.setTitle(info.title)
 }
 

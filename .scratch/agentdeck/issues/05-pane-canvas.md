@@ -4,8 +4,8 @@
 
 **Blocked by:** 04
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Split creates a second terminal
-- [ ] Presets and Tidy rebuild the grid
-- [ ] Layout persisted per workspace
+- [x] Split creates a second terminal
+- [x] Presets and Tidy rebuild the grid
+- [x] Layout persisted per workspace

@@ -143,6 +143,14 @@ select,
 .xterm .xterm-viewport {
   background-color: transparent !important;
 }
+/* Terminal scrollbars stay out of the way until you point at the pane. */
+.xterm .xterm-viewport::-webkit-scrollbar-thumb {
+  background: transparent;
+}
+.xterm:hover .xterm-viewport::-webkit-scrollbar-thumb {
+  background: #2d343d;
+  background-clip: padding-box;
+}
 
 @keyframes pulse-dot {
   0%,

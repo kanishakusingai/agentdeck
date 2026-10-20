@@ -4,8 +4,8 @@
 
 **Blocked by:** 05, 08
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Push-to-talk reducer test
-- [ ] Key configurable in Settings
-- [ ] Enhance Prompt passes text on stdin only
+- [x] Push-to-talk reducer test
+- [x] Key configurable in Settings
+- [x] Enhance Prompt passes text on stdin only

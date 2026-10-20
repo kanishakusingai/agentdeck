@@ -4,9 +4,9 @@
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] `npm run dev` opens the window; `npm run build` succeeds
-- [ ] contextIsolation on, nodeIntegration off, sandbox on; typed `window.api`
-- [ ] Vitest and Playwright-for-Electron run; e2e smoke test sees the title bar
-- [ ] JSON store module with round-trip test
+- [x] `npm run dev` opens the window; `npm run build` succeeds
+- [x] contextIsolation on, nodeIntegration off, sandbox on; typed `window.api`
+- [x] Vitest and Playwright-for-Electron run; e2e smoke test sees the title bar
+- [x] JSON store module with round-trip test

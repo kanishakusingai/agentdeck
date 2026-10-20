@@ -32,6 +32,8 @@ export interface AgentDef {
   headless?: HeadlessSpec
   /** Whether the CLI accepts an initial prompt as its first positional arg. */
   acceptsPromptArg?: boolean
+  /** Fixed args that reopen the most recent conversation in the folder. */
+  resumeArgs?: string[]
 }
 
 export interface DetectedAgent extends AgentDef {
@@ -70,8 +72,8 @@ export interface PtyCreateOptions {
   accountId?: string
   /** Login flow: run the provider's sign-in instead of the agent. */
   signInAccountId?: string
-  /** Prompt passed to the agent as its first argument (handoff). */
-  initialPrompt?: string
+  /** Reopen the agent's latest conversation in this folder (layout restore). */
+  resume?: boolean
   cols: number
   rows: number
 }

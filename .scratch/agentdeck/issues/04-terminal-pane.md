@@ -4,7 +4,7 @@
 
 **Blocked by:** 03
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] PTY Manager test: `echo hi` → `hi`; kill → exit; buffer replay
-- [ ] xterm.js pane wired over IPC with fit-on-resize
+- [x] PTY Manager test: `echo hi` → `hi`; kill → exit; buffer replay
+- [x] xterm.js pane wired over IPC with fit-on-resize

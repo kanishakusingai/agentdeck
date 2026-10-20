@@ -13,16 +13,22 @@ describe('buildShellLaunch', () => {
     })
   })
 
-  it('quotes an initial prompt safely for PowerShell', () => {
-    const launch = buildShellLaunch({ shell: 'pwsh', command: 'claude', promptArg: "Read 'notes.md' then continue" })
-    expect(launch.args.at(-1)).toBe("& 'claude' 'Read ''notes.md'' then continue'")
-    expect(launch.file).toBe('pwsh.exe')
+  it('passes fixed sub-commands such as login', () => {
+    expect(buildShellLaunch({ shell: 'pwsh', command: 'C:\\npm\\codex.cmd', commandArgs: ['login'] })).toEqual({
+      file: 'pwsh.exe',
+      args: ['-NoLogo', '-NoExit', '-Command', "& 'C:\\npm\\codex.cmd' 'login'"]
+    })
   })
 
-  it('supports cmd.exe', () => {
-    expect(buildShellLaunch({ shell: 'cmd', command: 'C:\\npm\\codex.cmd' })).toEqual({
+  it('escapes every quote character PowerShell understands, including typographic ones', () => {
+    const launch = buildShellLaunch({ shell: 'powershell', command: "C:\\Bob's \u2019tools\u2019\\agent.exe" })
+    expect(launch.args.at(-1)).toBe("& 'C:\\Bob''s \u2019\u2019tools\u2019\u2019\\agent.exe'")
+  })
+
+  it('gives cmd.exe the path as its own argument so spaces survive', () => {
+    expect(buildShellLaunch({ shell: 'cmd', command: 'C:\\Program Files\\Codex\\codex.exe', commandArgs: ['login'] })).toEqual({
       file: 'cmd.exe',
-      args: ['/K', '"C:\\npm\\codex.cmd"']
+      args: ['/K', 'C:\\Program Files\\Codex\\codex.exe', 'login']
     })
   })
 })

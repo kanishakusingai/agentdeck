@@ -4,7 +4,7 @@
 
 **Blocked by:** 05
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Parser tests with Claude and Codex fixtures
-- [ ] Thread view renders user/assistant/tool messages
+- [x] Parser tests with Claude and Codex fixtures
+- [x] Thread view renders user/assistant/tool messages

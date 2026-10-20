@@ -86,9 +86,11 @@ async function startRecording(): Promise<void> {
     const stream = await navigator.mediaDevices.getUserMedia({
       audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true }
     })
-    // The key may already be released while the mic was opening.
+    // The key may already be released while the mic was opening: nothing to transcribe.
     if (useVoice.getState().ptt.phase !== 'recording') {
       stream.getTracks().forEach((t) => t.stop())
+      dispatch({ type: 'cancelled' })
+      toast('Hold the key while you speak — the microphone needs a moment to start.')
       return
     }
     chunks = []

@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, writeFileSync, utimesSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { describe, expect, it } from 'vitest'
-import { listThreads, parseClaudeTranscript, parseCodexTranscript } from './transcripts'
+import { listThreads, parseClaudeTranscript, parseCodexTranscript, searchThreads } from './transcripts'
 
 const lines = (...objs: unknown[]): string => objs.map((o) => JSON.stringify(o)).join('\n')
 
@@ -86,5 +86,17 @@ describe('listThreads', () => {
 
   it('skips missing folders quietly', () => {
     expect(listThreads([{ agent: 'claude', accountId: 'x', home: join(tmpdir(), 'does-not-exist-agentdeck') }])).toEqual([])
+  })
+})
+
+describe('searchThreads', () => {
+  it('finds threads by words anywhere in the conversation, not just the title', () => {
+    const home = mkdtempSync(join(tmpdir(), 'agentdeck-search-'))
+    mkdirSync(join(home, 'projects', 'p'), { recursive: true })
+    writeFileSync(join(home, 'projects', 'p', 'a.jsonl'), claudeFixture)
+    const threads = listThreads([{ agent: 'claude', accountId: 'system', home }])
+
+    expect(searchThreads(threads, 'TOGGLE IS IN THE HEADER')).toEqual([threads[0].id])
+    expect(searchThreads(threads, 'kubernetes')).toEqual([])
   })
 })
