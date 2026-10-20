@@ -12,15 +12,8 @@ const MODES: { id: Mode; label: string; icon: typeof Bot; key: string }[] = [
 ]
 
 function ModeSwitch({ mode }: { mode: Mode }) {
-  const index = MODES.findIndex((m) => m.id === mode)
   return (
-    <div role="tablist" aria-label="Mode" className="no-drag relative grid h-7 grid-cols-3 rounded-md border border-line bg-surface p-0.5">
-      {/* Sliding indicator */}
-      <span
-        aria-hidden
-        className="absolute bottom-0.5 top-0.5 w-[calc((100%-4px)/3)] rounded-[5px] border border-line-strong bg-raised transition-transform duration-200 ease-out"
-        style={{ transform: `translateX(${index * 100}%)`, left: 2 }}
-      />
+    <div role="tablist" aria-label="Mode" className="no-drag flex h-7 items-center gap-0.5 rounded-md border border-line bg-surface p-0.5">
       {MODES.map((m) => (
         <Tip key={m.id} label={<>{m.label} mode · Ctrl+{m.key}</>}>
           <button
@@ -29,8 +22,8 @@ function ModeSwitch({ mode }: { mode: Mode }) {
             data-mode={m.id}
             onClick={() => setMode(m.id)}
             className={cn(
-              'relative z-10 flex w-[84px] items-center justify-center gap-1.5 rounded-[5px] text-xs font-medium transition-colors',
-              mode === m.id ? 'text-fg' : 'text-fg-muted hover:text-fg'
+              'no-drag flex h-full w-[84px] items-center justify-center gap-1.5 rounded-[5px] border text-xs font-medium transition-colors',
+              mode === m.id ? 'border-line-strong bg-raised text-fg' : 'border-transparent text-fg-muted hover:text-fg'
             )}
           >
             <m.icon size={14} strokeWidth={2} className={mode === m.id ? 'text-accent' : undefined} />
@@ -81,8 +74,14 @@ export function TitleBar() {
   const isMac = window.api.platform === 'darwin'
 
   return (
-    <header className="drag relative flex h-10 shrink-0 items-center border-b border-line bg-bg" style={{ paddingLeft: isMac ? 80 : 12, paddingRight: isMac ? 8 : 146 }}>
-      <div className="flex min-w-0 flex-1 items-center gap-2.5">
+    // Three-column grid keeps the mode switch centred without CSS transforms:
+    // Electron computes the title bar's clickable (no-drag) areas without transforms,
+    // so a translated switch would sit in the wrong place and swallow clicks.
+    <header
+      className="drag grid h-10 shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-3 border-b border-line bg-bg"
+      style={{ paddingLeft: isMac ? 80 : 12, paddingRight: isMac ? 8 : 146 }}
+    >
+      <div className="flex min-w-0 items-center gap-2.5">
         <Logo />
         <span className="text-sm font-semibold tracking-tight text-fg">AgentDeck</span>
         {mode === 'code' && workspace && (
@@ -93,11 +92,9 @@ export function TitleBar() {
         )}
       </div>
 
-      <div className="absolute left-1/2 -translate-x-1/2">
-        <ModeSwitch mode={mode} />
-      </div>
+      <ModeSwitch mode={mode} />
 
-      <div className="flex flex-1 items-center justify-end gap-0.5">
+      <div className="flex items-center justify-end gap-0.5">
         <VoiceIndicator />
         {mode === 'code' && (
           <IconButton label={sidebarOpen ? 'Hide sidebar · Ctrl+B' : 'Show sidebar · Ctrl+B'} onClick={() => toggleSidebar()} className={sidebarOpen ? 'text-fg' : undefined}>

@@ -14,6 +14,7 @@
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
     "test": "vitest run",
     "test:e2e": "electron-vite build && playwright test",
+    "test:real-clicks": "electron-vite build && node e2e/real-clicks.mjs dev",
     "dist": "npm run typecheck && electron-vite build && electron-builder --win",
     "postinstall": "install-electron"
   },
