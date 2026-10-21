@@ -65,7 +65,7 @@ function WorkspaceRow({ ws, active, now, onEdit }: { ws: Workspace; active: bool
     <li>
       <div className={cn('group flex h-8 items-center rounded-lg pl-2.5 pr-1 transition-colors', active ? 'bg-raised' : 'hover:bg-hover/60')}>
         <button onClick={() => setActiveWorkspace(ws.id)} className="flex min-w-0 flex-1 items-center gap-2 text-left" title={ws.path} data-testid="workspace-row">
-          {ws.name === 'Scratchpad' && <Zap size={12} className="shrink-0 text-warn" />}
+          {(ws.name === 'Home' || ws.name === 'Scratchpad') && <Zap size={12} className="shrink-0 text-warn" />}
           <span className={cn('truncate text-[13px]', active ? 'font-semibold text-fg' : 'text-fg-muted')}>{ws.name}</span>
         </button>
         <Menu>

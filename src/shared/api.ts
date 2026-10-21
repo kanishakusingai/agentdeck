@@ -39,7 +39,7 @@ export interface InvokeChannels {
   'app:setSettings': (settings: Settings) => void
   'app:openExternal': (url: string) => void
   'workspaces:add': () => string | null
-  /** "Continue without a folder": a private scratch folder in Documents\AgentDeck. */
+  /** "Continue without a folder": opens the user's own folder (C:\Users\<name>). */
   'workspaces:addScratch': () => string
   'workspaces:rename': (id: string, name: string) => void
   'workspaces:remove': (id: string) => void

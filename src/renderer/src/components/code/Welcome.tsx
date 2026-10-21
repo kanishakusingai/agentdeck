@@ -59,8 +59,8 @@ export function Welcome() {
             testId="continue-without-folder"
             icon={<Zap size={18} />}
             title="Continue without a folder"
-            body="Start right away in a private scratch folder. You can add a real project any time."
-            hint="Saved in Documents › AgentDeck › Scratchpad"
+            body="Start right away in your own user folder. You can add a real project any time."
+            hint="Opens C:\Users\your-name"
             onClick={() => void continueWithoutFolder()}
           />
         </div>

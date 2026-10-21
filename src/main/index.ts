@@ -48,7 +48,7 @@ function createWindow(): void {
     titleBarStyle: 'hidden',
     ...(process.platform === 'darwin'
       ? { trafficLightPosition: { x: 16, y: 16 } }
-      : { titleBarOverlay: { color: BG, symbolColor: '#a1a1aa', height: 44 } }),
+      : { titleBarOverlay: { color: BG, symbolColor: '#d4d4d8', height: 44 } }),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
@@ -136,12 +136,11 @@ function registerIpc(): void {
     return folder ? core.addWorkspace(folder) : null
   })
   handle('workspaces:addScratch', () => {
-    // Tests keep the scratch folder inside their throwaway data folder.
-    const dir = process.env.AGENTDECK_USER_DATA
-      ? join(app.getPath('userData'), 'Scratchpad')
-      : join(app.getPath('documents'), 'AgentDeck', 'Scratchpad')
+    // No folder chosen: work in the user's own folder (C:\Users\<name>).
+    // Tests use a folder inside their throwaway data folder instead.
+    const dir = process.env.AGENTDECK_USER_DATA ? join(app.getPath('userData'), 'Home') : app.getPath('home')
     mkdirSync(dir, { recursive: true })
-    return core.addWorkspace(dir, 'Scratchpad')
+    return core.addWorkspace(dir, 'Home')
   })
   handle('workspaces:rename', (id, name) => core.renameWorkspace(id, name))
   handle('workspaces:remove', (id) => core.removeWorkspace(id))
