@@ -177,6 +177,15 @@ export interface Settings {
 
 export type SidebarTab = 'browser' | 'dashboard'
 
+/** A browser tab in the right sidebar. 
+ is its number ("Browser 2"), fixed when it's made. */
+export interface SidebarBrowser {
+  id: string
+  n: number
+  /** Last address it showed. */
+  url?: string
+}
+
 export interface UiState {
   mode: Mode
   activeWorkspaceId?: string
@@ -187,6 +196,11 @@ export interface UiState {
   sidebarTab: SidebarTab
   /** Width of the right sidebar in px (dragged by its left edge). */
   sidebarWidth?: number
+  /** The sidebar's browser tabs, and which one is shown. */
+  sidebarBrowsers?: SidebarBrowser[]
+  sidebarBrowser?: string
+  /** Sessions folded shut in the left rail. */
+  collapsedSessions?: string[]
   /** The session shown for each project (workspace id → session id). */
   activeSessions?: Record<string, string>
 }
@@ -211,8 +225,6 @@ export const DEFAULT_SETTINGS: Settings = {
   browserHomeUrl: 'http://localhost:3000',
   fullPathPrompt: true
 }
-
-export const SIDEBAR_WIDTH = { min: 280, default: 340 }
 
 export const DEFAULT_UI: UiState = {
   mode: 'code',

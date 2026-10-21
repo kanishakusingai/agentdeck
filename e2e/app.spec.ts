@@ -36,7 +36,7 @@ const tabs = (page: Page) => page.getByTestId('pane-tab').locator('visible=true'
 
 /** Launch › Terminal (the plain terminal is the first item of the one Launch menu). */
 async function newTerminal(page: Page): Promise<void> {
-  await page.getByTestId('launch-agent').locator('visible=true').first().click()
+  await page.getByTestId('launch').locator('visible=true').first().click()
   await expect(page.getByRole('menuitem').first()).toHaveText(/Terminal/)
   await page.getByTestId('new-terminal').click()
 }
@@ -203,8 +203,8 @@ test('the whole app: projects, sessions, terminals, layout, modes, persistence',
   await closePane(page, 'Terminal 4')
   await expect(page.getByTestId('dashboard-row')).toHaveCount(3)
 
-  // 7. Launch-agent menu lists the catalog, Kiro CLI included
-  await page.getByTestId('launch-agent').first().click()
+  // 7. Launch menu lists the catalog, Kiro CLI included
+  await page.getByTestId('launch').first().click()
   await expect(page.getByRole('menuitem', { name: /Aider/ })).toBeVisible()
   await expect(page.getByRole('menuitem', { name: /Kiro CLI/ })).toBeVisible()
   await shot(page, '04-launch-menu')
@@ -234,14 +234,28 @@ test('the whole app: projects, sessions, terminals, layout, modes, persistence',
   // 8. Browser tab in the sidebar; + adds another
   await page.getByRole('tab', { name: 'Browser', exact: true }).click()
   await expect(page.getByLabel('Address').locator('visible=true')).toHaveValue('http://localhost:3000')
-  await page.getByTestId('sidebar-add').click()
-  await page.getByTestId('sidebar-new-browser').click()
-  await expect(page.getByTestId('sidebar-browser-tab')).toHaveCount(2)
-  await expect(page.getByRole('tab', { name: 'Browser 2' })).toHaveAttribute('aria-selected', 'true')
+  for (let i = 0; i < 3; i++) {
+    await page.getByTestId('sidebar-add').click()
+    await page.getByTestId('sidebar-new-browser').click()
+  }
+  await expect(page.getByTestId('sidebar-browser-tab')).toHaveText(['Browser', 'Browser 2', 'Browser 3', 'Browser 4'])
+  await expect(page.getByRole('tab', { name: 'Browser 4' })).toHaveAttribute('aria-selected', 'true')
+  // The new tab is scrolled into view even when the row overflows
+  await expect(page.getByRole('tab', { name: 'Browser 4' })).toBeInViewport({ ratio: 0.95 })
   await page.waitForTimeout(1200)
   await shot(page, '05-browser')
-  await page.getByRole('button', { name: 'Close Browser 2' }).click({ force: true })
-  await expect(page.getByTestId('sidebar-browser-tab')).toHaveCount(1)
+  // Closing one never renames the others; the × of the shown tab is visible, Delete closes from the keyboard
+  await page.getByRole('tab', { name: 'Browser 2' }).click()
+  await page.getByTitle('Close Browser 2').click()
+  await expect(page.getByTestId('sidebar-browser-tab')).toHaveText(['Browser', 'Browser 3', 'Browser 4'])
+  await expect(page.getByRole('tab', { name: 'Browser', exact: true })).toHaveAttribute('aria-selected', 'true')
+  await page.getByRole('tab', { name: 'Browser 4' }).click()
+  await page.getByRole('tab', { name: 'Browser 4' }).press('Delete')
+  await expect(page.getByTestId('sidebar-browser-tab')).toHaveText(['Browser', 'Browser 3'])
+  await expect(page.getByRole('tab', { name: 'Browser 3' })).toHaveAttribute('aria-selected', 'true')
+  // Arrow keys move between the sidebar tabs
+  await page.getByRole('tab', { name: 'Browser 3' }).press('ArrowLeft')
+  await expect(page.getByRole('tab', { name: 'Browser', exact: true })).toHaveAttribute('aria-selected', 'true')
   await page.getByRole('tab', { name: 'Dashboard' }).click()
 
   // 8b. The sidebar can be dragged wider by its left edge; double-click resets it
@@ -255,7 +269,22 @@ test('the whole app: projects, sessions, terminals, layout, modes, persistence',
   await page.mouse.up()
   expect(Math.abs((await sidebarWidth()) - 540)).toBeLessThanOrEqual(3)
   await shot(page, '05b-wide-sidebar')
+  // It can't squeeze the panes: the widest leaves room for the left rail and 480px of panes
+  const moved = (await page.getByTestId('sidebar-resizer').boundingBox())!
+  await page.mouse.move(moved.x + moved.width / 2, moved.y + moved.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(0, moved.y + moved.height / 2, { steps: 5 })
+  await page.mouse.up()
+  const widest = (await page.evaluate<number>('window.innerWidth')) - 24 - 244 - 8 - 480
+  expect(Math.abs((await sidebarWidth()) - widest)).toBeLessThanOrEqual(1)
   await page.getByTestId('sidebar-resizer').dblclick()
+  expect(await sidebarWidth()).toBe(340)
+  // A plain click doesn't change it; arrow keys do
+  await page.getByTestId('sidebar-resizer').click()
+  expect(await sidebarWidth()).toBe(340)
+  await page.getByTestId('sidebar-resizer').press('ArrowLeft')
+  expect(await sidebarWidth()).toBe(360)
+  await page.getByTestId('sidebar-resizer').press('ArrowRight')
   expect(await sidebarWidth()).toBe(340)
 
   // 9. Mode switch changes rail and main area
@@ -310,6 +339,8 @@ test('the whole app: projects, sessions, terminals, layout, modes, persistence',
   await expect(tabs(page)).toHaveCount(3)
   // Restored panes belong to their project
   await expect(page.getByTestId('dashboard-row').first()).toContainText('Site')
+  // The sidebar's browser tabs come back too
+  await expect(page.getByTestId('sidebar-browser-tab')).toHaveText(['Browser', 'Browser 3'])
 
   // 13. A second project without a folder, from the side panel's “New project”
   await page.getByTestId('add-workspace').click()

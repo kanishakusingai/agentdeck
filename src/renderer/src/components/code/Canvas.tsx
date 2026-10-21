@@ -12,7 +12,7 @@ import { toast, useApp } from '../../lib/store'
 import { ThreadView } from '../thread/ThreadView'
 import { ActivityDot, AgentIcon, ContextMenu, IconButton, Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger, Tip } from '../ui'
 import { BrowserView } from './BrowserView'
-import { LaunchAgentMenu } from './LaunchAgentMenu'
+import { LaunchMenu } from './LaunchMenu'
 import { PaneMenuItems } from './PaneMenu'
 import { TerminalPanel } from './TerminalPanel'
 
@@ -129,7 +129,7 @@ function makeWatermark(workspaceId: string, sessionId: string) {
               : 'Use Launch to open a terminal or start an agent in this folder.'}
           </div>
         </div>
-        <LaunchAgentMenu workspaceId={workspaceId} sessionId={sessionId} />
+        <LaunchMenu workspaceId={workspaceId} sessionId={sessionId} />
       </div>
     )
   }
@@ -204,10 +204,9 @@ function LayoutMenu({ sessionId, count }: { sessionId: string; count: number }) 
     <Menu>
       <MenuTrigger asChild>
         <button
-          disabled={count === 0}
           title={`Layout · ${count} of ${MAX_PANES_PER_SESSION} panes in this session`}
           data-testid="layout-menu"
-          className="flex h-7 items-center gap-1.5 rounded-lg border border-line bg-panel px-2 text-xs font-medium text-fg-muted transition-colors hover:bg-hover hover:text-fg disabled:opacity-40 data-[state=open]:bg-hover data-[state=open]:text-fg"
+          className={cn('flex h-7 items-center gap-1.5 rounded-lg border border-line bg-panel px-2 text-xs font-medium text-fg-muted transition-colors hover:bg-hover hover:text-fg data-[state=open]:bg-hover data-[state=open]:text-fg', count === 0 && 'opacity-50')}
         >
           <LayoutGrid size={13} />
           <span className="tabular">
@@ -217,18 +216,18 @@ function LayoutMenu({ sessionId, count }: { sessionId: string; count: number }) 
         </button>
       </MenuTrigger>
       <MenuContent align="end">
-        <MenuLabel>Arrange panes</MenuLabel>
-        <MenuItem onSelect={() => arrange(sessionId, 1)}>
+        <MenuLabel>{count === 0 ? 'Nothing on screen to arrange' : 'Arrange panes'}</MenuLabel>
+        <MenuItem disabled={count === 0} onSelect={() => arrange(sessionId, 1)}>
           <Square size={13} className="text-fg-muted" /> One at a time
         </MenuItem>
-        <MenuItem onSelect={() => arrange(sessionId, 2)}>
+        <MenuItem disabled={count === 0} onSelect={() => arrange(sessionId, 2)}>
           <Columns2 size={13} className="text-fg-muted" /> Two side by side
         </MenuItem>
-        <MenuItem onSelect={() => arrange(sessionId, 4)}>
+        <MenuItem disabled={count === 0} onSelect={() => arrange(sessionId, 4)}>
           <Grid2x2 size={13} className="text-fg-muted" /> Four in a grid
         </MenuItem>
         <MenuSeparator />
-        <MenuItem onSelect={() => arrange(sessionId)} hint="Ctrl+Shift+L" data-testid="tidy">
+        <MenuItem disabled={count === 0} onSelect={() => arrange(sessionId)} hint="Ctrl+Shift+L" data-testid="tidy">
           <LayoutGrid size={13} className="text-fg-muted" /> Tidy — all panes, equal tiles
         </MenuItem>
       </MenuContent>
@@ -262,7 +261,7 @@ export function CanvasToolbar({ workspaceId }: { workspaceId: string }) {
       </div>
       <SessionTabs workspaceId={workspaceId} />
       <LayoutMenu sessionId={sessionId} count={count} />
-      <LaunchAgentMenu workspaceId={workspaceId} sessionId={sessionId} />
+      <LaunchMenu workspaceId={workspaceId} sessionId={sessionId} />
     </div>
   )
 }

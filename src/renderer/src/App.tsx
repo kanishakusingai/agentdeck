@@ -4,7 +4,7 @@ import type { Mode } from '@shared/types'
 import { AgentMain, RoutineRail } from './components/agent/AgentMode'
 import { Canvas, CanvasToolbar } from './components/code/Canvas'
 import { addWorkspace, CodeRail } from './components/code/CodeRail'
-import { ResizableSidebar } from './components/code/Sidebar'
+import { ResizableSidebar } from './components/code/ResizableSidebar'
 import { Welcome } from './components/code/Welcome'
 import { AskHost } from './components/Ask'
 import { SettingsDialog } from './components/SettingsDialog'
@@ -16,6 +16,7 @@ import { sessionsOf } from '@shared/types'
 import { FullScreenTerminal } from './components/code/FullScreen'
 import { NewProjectDialog, openNewProject } from './components/code/NewProject'
 import { cn } from './lib/cn'
+import { RAIL_WIDTH } from './lib/sidebar'
 import { boot, setMode, toggleRail, toggleSidebar, useApp } from './lib/store'
 import { installPushToTalk } from './voice/dictation'
 
@@ -127,7 +128,7 @@ export function App() {
         <TitleBar />
         <div className="flex min-h-0 flex-1 gap-2 px-2 pb-2">
           {showRail && (
-            <aside className="card w-[244px] shrink-0 overflow-hidden" data-testid={`rail-${mode}`}>
+            <aside className="card shrink-0 overflow-hidden" style={{ width: RAIL_WIDTH }} data-testid={`rail-${mode}`}>
               {mode === 'code' && <CodeRail />}
               {mode === 'thread' && <ThreadRail />}
               {mode === 'agent' && <RoutineRail />}

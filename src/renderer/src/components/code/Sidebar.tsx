@@ -1,13 +1,13 @@
 import { AppWindow, Globe, LayoutDashboard, Plus, X } from 'lucide-react'
-import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react'
-import { create } from 'zustand'
+import { useEffect, useRef, type KeyboardEvent } from 'react'
 import { agentById } from '@shared/agents'
-import { SIDEBAR_WIDTH, type PtyInfo } from '@shared/types'
+import type { PtyInfo } from '@shared/types'
 import { accountName } from '../../lib/accounts'
 import { tracker, useActivityClock, type Activity } from '../../lib/activity'
 import { focusPty, openBrowserPane } from '../../lib/canvas'
 import { cn } from '../../lib/cn'
-import { setSidebarTab, setSidebarWidth, useApp } from '../../lib/store'
+import { browserLabel, DEFAULT_BROWSERS, MAIN_BROWSER } from '../../lib/sidebar'
+import { closeSidebarBrowser, newSidebarBrowser, rememberSidebarBrowserUrl, setSidebarTab, showSidebarBrowser, shownSidebarBrowser, useApp } from '../../lib/store'
 import { ActivityDot, activityLabel, activityText, AgentIcon, Menu, MenuContent, MenuItem, MenuTrigger } from '../ui'
 import { BrowserView } from './BrowserView'
 
@@ -100,57 +100,78 @@ function Dashboard({ rows }: { rows: { info: PtyInfo; activity: Activity }[] }) 
   )
 }
 
-/** The sidebar's browser tabs ('main' is always there; more can be added with +). Lives outside the
- *  component so the list survives hiding the sidebar. */
-const useBrowsers = create<{ tabs: string[]; current: string }>(() => ({ tabs: ['main'], current: 'main' }))
-let nextBrowser = 2
-
-function newBrowserTab(): void {
-  const id = `b${nextBrowser++}`
-  useBrowsers.setState((s) => ({ tabs: [...s.tabs, id], current: id }))
-  setSidebarTab('browser')
-}
-
-function closeBrowserTab(id: string): void {
-  useBrowsers.setState((s) => ({ tabs: s.tabs.filter((t) => t !== id), current: s.current === id ? 'main' : s.current }))
-}
-
 const tabClass = (on: boolean): string =>
   cn('flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors', on ? 'bg-hover text-fg' : 'text-fg-faint hover:text-fg')
+
+/** ←/→/Home/End move between the tabs (only the selected tab is in the Tab order). */
+function onTabListKey(e: KeyboardEvent<HTMLDivElement>): void {
+  const tabs = [...e.currentTarget.querySelectorAll<HTMLElement>('[role="tab"]')]
+  const i = tabs.indexOf(document.activeElement as HTMLElement)
+  if (i < 0) return
+  const next = { ArrowRight: (i + 1) % tabs.length, ArrowLeft: (i - 1 + tabs.length) % tabs.length, Home: 0, End: tabs.length - 1 }[e.key]
+  if (next === undefined) return
+  e.preventDefault()
+  tabs[next].focus()
+  tabs[next].click()
+}
 
 export function Sidebar() {
   const tab = useApp((s) => s.snapshot!.ui.sidebarTab)
   const home = useApp((s) => s.snapshot!.settings.browserHomeUrl)
   const workspaceId = useApp((s) => s.snapshot!.ui.activeWorkspaceId)
+  const browsers = useApp((s) => s.snapshot!.ui.sidebarBrowsers) ?? DEFAULT_BROWSERS
+  const shown = useApp((s) => shownSidebarBrowser(s.snapshot!.ui))
   const ptyMap = useApp((s) => s.ptys)
-  const { tabs: browsers, current } = useBrowsers()
   const now = useActivityClock()
   const rows = Object.values(ptyMap)
     .sort((a, b) => a.startedAt - b.startedAt)
     .map((info) => ({ info, activity: tracker.activity(info, now) }))
   const needs = rows.filter((r) => r.activity === 'needs').length
-  const showBrowser = (id: string): void => {
-    useBrowsers.setState({ current: id })
-    setSidebarTab('browser')
-  }
+  const tabList = useRef<HTMLDivElement>(null)
+  // When there are more tabs than fit, keep the one on screen scrolled into view.
+  useEffect(() => {
+    const selected = tabList.current?.querySelector('[aria-selected="true"]')
+    // Scroll the whole tab (its name and its ×) into view.
+    ;(selected?.closest('[role="presentation"]') ?? selected)?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+  }, [tab, shown, browsers.length])
   return (
     <aside aria-label="Sidebar" className="flex h-full flex-col">
       <div className="flex h-11 shrink-0 items-center gap-1 border-b border-line pl-2 pr-1.5">
-        <div role="tablist" className="no-scrollbar flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
-          <button role="tab" aria-selected={tab === 'dashboard'} onClick={() => setSidebarTab('dashboard')} className={tabClass(tab === 'dashboard')}>
+        <div ref={tabList} role="tablist" aria-label="Sidebar" onKeyDown={onTabListKey} className="no-scrollbar flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
+          <button role="tab" aria-selected={tab === 'dashboard'} tabIndex={tab === 'dashboard' ? 0 : -1} onClick={() => setSidebarTab('dashboard')} className={tabClass(tab === 'dashboard')}>
             <LayoutDashboard size={13} /> Dashboard
             {needs > 0 && <span className="tabular rounded bg-warn/15 px-1 text-2xs text-warn">{needs}</span>}
           </button>
-          {browsers.map((id, i) => {
-            const on = tab === 'browser' && current === id
-            const label = i === 0 ? 'Browser' : `Browser ${i + 1}`
+          {browsers.map((b) => {
+            const on = tab === 'browser' && shown === b.id
+            const label = browserLabel(b)
+            const closable = b.id !== MAIN_BROWSER
             return (
-              <div key={id} className={cn(tabClass(on), 'group pr-1')}>
-                <button role="tab" aria-selected={on} onClick={() => showBrowser(id)} className="flex items-center gap-1.5" data-testid="sidebar-browser-tab">
+              <div key={b.id} role="presentation" className={cn(tabClass(on), 'group', closable && 'pr-1')}>
+                <button
+                  role="tab"
+                  aria-selected={on}
+                  tabIndex={on ? 0 : -1}
+                  aria-keyshortcuts={closable ? 'Delete' : undefined}
+                  onClick={() => showSidebarBrowser(b.id)}
+                  onKeyDown={(e) => {
+                    if (closable && e.key === 'Delete') closeSidebarBrowser(b.id)
+                  }}
+                  className="flex items-center gap-1.5"
+                  data-testid="sidebar-browser-tab"
+                >
                   <Globe size={13} /> {label}
                 </button>
-                {i > 0 && (
-                  <button aria-label={`Close ${label}`} onClick={() => closeBrowserTab(id)} className="rounded p-0.5 text-fg-faint opacity-0 hover:bg-raised hover:text-fg focus:opacity-100 group-hover:opacity-100">
+                {closable && (
+                  // Mouse shortcut only — keyboard and screen-reader users close a tab with Delete.
+                  <button
+                    aria-hidden
+                    tabIndex={-1}
+                    title={`Close ${label}`}
+                    onClick={() => closeSidebarBrowser(b.id)}
+                    className={cn('rounded p-0.5 text-fg-faint hover:bg-raised hover:text-fg group-hover:opacity-100', on ? 'opacity-100' : 'opacity-0')}
+                    data-testid="sidebar-browser-close"
+                  >
                     <X size={11} />
                   </button>
                 )}
@@ -165,10 +186,10 @@ export function Sidebar() {
             </button>
           </MenuTrigger>
           <MenuContent align="end">
-            <MenuItem onSelect={newBrowserTab} data-testid="sidebar-new-browser">
+            <MenuItem onSelect={newSidebarBrowser} data-testid="sidebar-new-browser">
               <Globe size={13} className="text-fg-muted" /> New browser tab
             </MenuItem>
-            <MenuItem disabled={!workspaceId} onSelect={() => workspaceId && void openBrowserPane(workspaceId, home)}>
+            <MenuItem disabled={!workspaceId} onSelect={() => workspaceId && void openBrowserPane(workspaceId, home)} data-testid="sidebar-browser-pane">
               <AppWindow size={13} className="text-fg-muted" /> Browser on screen, as a pane
             </MenuItem>
           </MenuContent>
@@ -176,9 +197,13 @@ export function Sidebar() {
       </div>
       <div className="relative min-h-0 flex-1">
         {/* Keep every browser mounted so pages don't reload when switching tabs. */}
-        {browsers.map((id) => (
-          <div key={id} className={cn('absolute inset-0', (tab !== 'browser' || current !== id) && 'invisible')}>
-            <BrowserView initialUrl={home} onPopOut={workspaceId ? (url) => void openBrowserPane(workspaceId, url) : undefined} />
+        {browsers.map((b) => (
+          <div key={b.id} className={cn('absolute inset-0', (tab !== 'browser' || shown !== b.id) && 'invisible')}>
+            <BrowserView
+              initialUrl={b.url ?? home}
+              onUrlChange={(url) => rememberSidebarBrowserUrl(b.id, url)}
+              onPopOut={workspaceId ? (url) => void openBrowserPane(workspaceId, url) : undefined}
+            />
           </div>
         ))}
         {tab === 'dashboard' && (
@@ -188,88 +213,5 @@ export function Sidebar() {
         )}
       </div>
     </aside>
-  )
-}
-
-/** Keep at least this much room for the panes in the middle. */
-const MIN_CANVAS = 480
-
-function maxWidth(): number {
-  return Math.max(SIDEBAR_WIDTH.min, window.innerWidth - MIN_CANVAS)
-}
-
-function useWindowWidth(): number {
-  const [w, setW] = useState(window.innerWidth)
-  useEffect(() => {
-    const on = (): void => setW(window.innerWidth)
-    window.addEventListener('resize', on)
-    return () => window.removeEventListener('resize', on)
-  }, [])
-  return w
-}
-
-/** The right sidebar with a drag handle on its left edge (double-click it to reset the size). */
-export function ResizableSidebar() {
-  const saved = useApp((s) => s.snapshot!.ui.sidebarWidth ?? SIDEBAR_WIDTH.default)
-  const [dragWidth, setDragWidth] = useState<number | null>(null)
-  const drag = useRef<{ x: number; w: number } | null>(null)
-  useWindowWidth() // re-clamp when the window changes size
-  const clamp = (w: number): number => Math.min(maxWidth(), Math.max(SIDEBAR_WIDTH.min, w))
-  const width = clamp(dragWidth ?? saved)
-
-  const onDown = (e: PointerEvent<HTMLDivElement>): void => {
-    if (e.button !== 0) return
-    e.preventDefault()
-    e.currentTarget.setPointerCapture(e.pointerId)
-    drag.current = { x: e.clientX, w: width }
-    setDragWidth(width)
-  }
-  const onMove = (e: PointerEvent<HTMLDivElement>): void => {
-    if (!drag.current) return
-    // Dragging left makes the sidebar wider.
-    setDragWidth(clamp(drag.current.w + (drag.current.x - e.clientX)))
-  }
-  const onUp = (): void => {
-    if (!drag.current) return
-    drag.current = null
-    if (dragWidth !== null) setSidebarWidth(dragWidth)
-    setDragWidth(null)
-  }
-  const onKey = (e: KeyboardEvent<HTMLDivElement>): void => {
-    const step = e.shiftKey ? 80 : 20
-    if (e.key === 'ArrowLeft') setSidebarWidth(clamp(width + step))
-    else if (e.key === 'ArrowRight') setSidebarWidth(clamp(width - step))
-    else return
-    e.preventDefault()
-  }
-
-  return (
-    <div className="relative shrink-0" style={{ width }} data-testid="sidebar">
-      <div
-        role="separator"
-        aria-orientation="vertical"
-        aria-label="Resize sidebar"
-        aria-valuemin={SIDEBAR_WIDTH.min}
-        aria-valuemax={maxWidth()}
-        aria-valuenow={width}
-        tabIndex={0}
-        title="Drag to resize · double-click to reset"
-        onPointerDown={onDown}
-        onPointerMove={onMove}
-        onPointerUp={onUp}
-        onPointerCancel={onUp}
-        onDoubleClick={() => setSidebarWidth(SIDEBAR_WIDTH.default)}
-        onKeyDown={onKey}
-        className="group absolute -left-2 top-0 bottom-0 z-10 flex w-2 cursor-col-resize justify-center outline-none"
-        data-testid="sidebar-resizer"
-      >
-        <span className={cn('my-3 w-0.5 rounded-full bg-transparent transition-colors group-hover:bg-accent/70 group-focus-visible:bg-accent', dragWidth !== null && 'bg-accent')} />
-      </div>
-      <div className="card h-full overflow-hidden">
-        <Sidebar />
-      </div>
-      {/* While dragging, a cover stops the browser and terminals from grabbing the mouse. */}
-      {dragWidth !== null && <div className="fixed inset-0 z-[70] cursor-col-resize" />}
-    </div>
   )
 }

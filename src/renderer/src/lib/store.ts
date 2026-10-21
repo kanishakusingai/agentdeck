@@ -1,7 +1,8 @@
 import { create } from 'zustand'
 import type { AppSnapshot, RunSummary } from '@shared/api'
-import type { DetectedAgent, Mode, PtyInfo, Routine, Settings, SidebarTab, UiState, UsageLimitEvent } from '@shared/types'
+import type { DetectedAgent, Mode, PtyInfo, Routine, Settings, SidebarBrowser, SidebarTab, UiState, UsageLimitEvent } from '@shared/types'
 import type { PanelParams } from './canvas'
+import { addBrowser, closeBrowser, DEFAULT_BROWSERS, MAIN_BROWSER, shownAfterClose, withUrl } from './sidebar'
 
 export type PanelKind = 'terminal' | 'browser' | 'thread'
 
@@ -94,7 +95,35 @@ export const setActiveSession = (workspaceId: string, sessionId: string): void =
 export const toggleSidebar = (open?: boolean): void => patchUi({ sidebarOpen: open ?? !ui().sidebarOpen })
 export const toggleRail = (open?: boolean): void => patchUi({ railOpen: open ?? !ui().railOpen })
 export const setSidebarTab = (sidebarTab: SidebarTab): void => patchUi({ sidebarTab, sidebarOpen: true })
-export const setSidebarWidth = (sidebarWidth: number): void => patchUi({ sidebarWidth: Math.round(sidebarWidth) })
+export const setSidebarWidth = (width: number): void => {
+  const sidebarWidth = Math.round(width)
+  if (ui().sidebarWidth !== sidebarWidth) patchUi({ sidebarWidth })
+}
+
+export const sidebarBrowsers = (u: UiState = ui()): SidebarBrowser[] => (u.sidebarBrowsers?.length ? u.sidebarBrowsers : DEFAULT_BROWSERS)
+export const shownSidebarBrowser = (u: UiState = ui()): string => {
+  const id = u.sidebarBrowser ?? MAIN_BROWSER
+  return sidebarBrowsers(u).some((b) => b.id === id) ? id : MAIN_BROWSER
+}
+export const showSidebarBrowser = (id: string): void => patchUi({ sidebarTab: 'browser', sidebarOpen: true, sidebarBrowser: id })
+export function newSidebarBrowser(): void {
+  const id = crypto.randomUUID().slice(0, 8)
+  patchUi({ sidebarBrowsers: addBrowser(sidebarBrowsers(), id), sidebarBrowser: id, sidebarTab: 'browser', sidebarOpen: true })
+}
+export function closeSidebarBrowser(id: string): void {
+  const list = sidebarBrowsers()
+  patchUi({ sidebarBrowsers: closeBrowser(list, id), sidebarBrowser: shownAfterClose(list, shownSidebarBrowser(), id) })
+}
+/** Remember a sidebar browser's address so it reopens there after a restart. */
+export function rememberSidebarBrowserUrl(id: string, url: string): void {
+  const list = sidebarBrowsers()
+  const tab = list.find((b) => b.id === id)
+  if (tab && tab.url !== url) patchUi({ sidebarBrowsers: withUrl(list, id, url) })
+}
+export function toggleSessionCollapsed(sessionId: string): void {
+  const shut = ui().collapsedSessions ?? []
+  patchUi({ collapsedSessions: shut.includes(sessionId) ? shut.filter((id) => id !== sessionId) : [...shut, sessionId] })
+}
 
 export async function saveSettings(patch: Partial<Settings>): Promise<void> {
   const snap = useApp.getState().snapshot

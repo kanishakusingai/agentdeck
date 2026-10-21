@@ -1,7 +1,10 @@
 # Glossary
 
 - **Workspace**: a folder on disk the user works in. Shown in the left rail; owns a pane canvas.
-- **Pane**: one tile on a workspace's canvas. Kinds: terminal, browser, thread.
+- **Session**: one screen of panes inside a workspace (up to 8 panes). A workspace has one or more sessions; the left rail lists them.
+- **Pane**: one tile on a session's canvas. Kinds: terminal, browser, thread.
+- **Launch menu**: the one button that opens a new pane in the session — a plain terminal at the top, then every agent.
+- **Sidebar**: the right-hand panel in Code mode: the dashboard plus one or more sidebar browser tabs (separate from browser panes).
 - **Terminal pane**: a live shell (PTY) whose cwd is the workspace folder.
 - **Agent**: a CLI coding tool on PATH (Claude Code, Codex, Gemini CLI, …). Launching an agent opens a terminal pane running it.
 - **Account**: a named sign-in for an agent provider (Claude or Codex), isolated in its own config folder. The app never reads or stores tokens.

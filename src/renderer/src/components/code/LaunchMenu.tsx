@@ -51,14 +51,14 @@ function AgentItem({ agent, workspaceId, sessionId }: { agent: DetectedAgent; wo
 }
 
 /** The one "Launch" button: a plain terminal at the top, then every agent. */
-export function LaunchAgentMenu({ workspaceId, sessionId, compact }: { workspaceId: string; sessionId?: string; compact?: boolean }) {
+export function LaunchMenu({ workspaceId, sessionId, compact }: { workspaceId: string; sessionId?: string; compact?: boolean }) {
   const agents = useApp((s) => s.agents)
   const installed = agents.filter((a) => a.installed)
   const missing = agents.filter((a) => !a.installed)
   return (
     <Menu>
       <MenuTrigger asChild>
-        <Button size="sm" variant={compact ? 'secondary' : 'primary'} data-testid="launch-agent">
+        <Button size="sm" variant={compact ? 'secondary' : 'primary'} data-testid="launch">
           <Sparkles size={13} />
           Launch
           <ChevronDown size={12} className="opacity-70" />

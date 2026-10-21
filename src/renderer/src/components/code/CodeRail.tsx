@@ -5,7 +5,7 @@ import { tracker, useActivityClock } from '../../lib/activity'
 import { activeSessionId, focusPanel, moveToSession, openTerminal, showHiddenPane, showSession } from '../../lib/canvas'
 import { cn } from '../../lib/cn'
 import { deleteSession, newSession, removeProject, renameProject, renameSession } from '../../lib/sessions'
-import { errorText, setActiveWorkspace, toast, useApp, type HiddenPane, type PanelSummary } from '../../lib/store'
+import { errorText, setActiveWorkspace, toast, toggleSessionCollapsed, useApp, type HiddenPane, type PanelSummary } from '../../lib/store'
 import { ActivityDot, AgentIcon, ContextMenu, IconButton, Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger, SectionLabel, Tip } from '../ui'
 import { openNewProject } from './NewProject'
 import { PaneMenuItems } from './PaneMenu'
@@ -74,7 +74,7 @@ function SessionBlock({ ws, session, now, showHeader }: { ws: Workspace; session
     return s.snapshot!.ui.activeWorkspaceId === ws.id && activeSessionId(ws.id) === session.id
   })
   const [over, setOver] = useState(false)
-  const [open, setOpen] = useState(true)
+  const open = useApp((s) => !s.snapshot!.ui.collapsedSessions?.includes(session.id))
   const count = panes.length + hidden.length
 
   const onDrop = (e: DragEvent): void => {
@@ -122,7 +122,7 @@ function SessionBlock({ ws, session, now, showHeader }: { ws: Workspace; session
             <button
               aria-label={open ? `Collapse ${session.name}` : `Expand ${session.name}`}
               aria-expanded={open}
-              onClick={() => setOpen(!open)}
+              onClick={() => toggleSessionCollapsed(session.id)}
               className="flex h-6 w-5 shrink-0 items-center justify-center rounded text-fg-faint hover:text-fg"
               data-testid="session-toggle"
             >
@@ -145,7 +145,9 @@ function SessionBlock({ ws, session, now, showHeader }: { ws: Workspace; session
           </div>
         </ContextMenu>
       )}
-      {showHeader && !open ? null : count === 0 ? (
+      {showHeader && !open ? (
+        over && <div className="py-1 pl-9 text-2xs text-accent">Drop to move here</div>
+      ) : count === 0 ? (
         <div className="py-1 pl-9 text-2xs text-fg-faint">{over ? 'Drop to move here' : 'Empty'}</div>
       ) : (
         <ul className="flex flex-col gap-px pb-0.5">
