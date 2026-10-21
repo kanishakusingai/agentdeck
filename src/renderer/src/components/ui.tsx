@@ -3,7 +3,7 @@ import * as RMenu from '@radix-ui/react-dropdown-menu'
 import * as RSelect from '@radix-ui/react-select'
 import * as RTooltip from '@radix-ui/react-tooltip'
 import { cva, type VariantProps } from 'class-variance-authority'
-import { Aperture, Asterisk, Atom, Bot, Boxes, Check, ChevronDown, CodeXml, Feather, Moon, MousePointer2, Orbit, Sparkle, SquareTerminal, X, Zap } from 'lucide-react'
+import { Asterisk, Atom, Boxes, Check, ChevronDown, Feather, Moon, Orbit, SquareTerminal, X, Zap } from 'lucide-react'
 import { Children, forwardRef, isValidElement, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactElement, type ReactNode, type TextareaHTMLAttributes } from 'react'
 import { createPortal } from 'react-dom'
 import type { PaneStatus } from '@shared/types'
@@ -245,26 +245,42 @@ export function ActivityDot({ activity, className }: { activity: Activity; class
 
 // ---------- Agent marks ----------
 
-const AGENT_MARKS: Record<string, { icon: typeof Asterisk; color: string }> = {
-  claude: { icon: Asterisk, color: 'var(--color-claude)' },
-  codex: { icon: Aperture, color: '#ededef' },
-  gemini: { icon: Sparkle, color: '#60a5fa' },
-  'cursor-agent': { icon: MousePointer2, color: '#ededef' },
-  copilot: { icon: Bot, color: '#a1a1aa' },
-  grok: { icon: Orbit, color: '#ededef' },
+// Real product logos (src/renderer/src/assets/agents, MIT — see LICENSE.md there).
+const LOGOS = import.meta.glob('../assets/agents/*.svg', { eager: true, query: '?url', import: 'default' }) as Record<string, string>
+const logoUrl = (id: string): string | undefined => LOGOS[`../assets/agents/${id}.svg`]
+/** One-colour logos (drawn in currentColor) are tinted with a mask instead of shown as-is. */
+const MONO_LOGOS = new Set(['cursor-agent', 'copilot', 'grok', 'opencode', 'goose', 'cline', 'kilocode'])
+
+/** Fallback marks for tools without a published logo. */
+const FALLBACK_MARKS: Record<string, { icon: typeof Asterisk; color: string }> = {
   droid: { icon: Boxes, color: '#f5a524' },
-  opencode: { icon: CodeXml, color: '#ededef' },
+  aider: { icon: Feather, color: '#22c55e' },
+  crush: { icon: Moon, color: '#c084fc' },
+  auggie: { icon: Orbit, color: '#a3e635' },
+  codebuff: { icon: Atom, color: '#60a5fa' },
   kimi: { icon: Moon, color: '#a1a1aa' },
-  amp: { icon: Zap, color: '#f97316' },
-  antigravity: { icon: Atom, color: '#60a5fa' },
-  aider: { icon: Feather, color: '#22c55e' }
+  amp: { icon: Zap, color: '#f97316' }
 }
 
-/** A small brand-coloured mark for an agent (or a terminal icon for plain shells). */
+/** The product's logo for an agent (or a terminal icon for plain shells). */
 export function AgentIcon({ agentId, size = 14, tile, className }: { agentId?: string; size?: number; tile?: boolean; className?: string }) {
-  const mark = agentId ? AGENT_MARKS[agentId] : undefined
-  const Icon = mark?.icon ?? SquareTerminal
-  const glyph = <Icon size={size} strokeWidth={mark?.icon === Asterisk ? 2.75 : 2} style={{ color: mark?.color ?? 'var(--color-fg-muted)' }} aria-hidden className={tile ? undefined : className} />
+  const url = agentId ? logoUrl(agentId) : undefined
+  let glyph: ReactElement
+  if (url && MONO_LOGOS.has(agentId!)) {
+    glyph = (
+      <span
+        aria-hidden
+        className={cn('inline-block shrink-0 bg-[#ededef]', !tile && className)}
+        style={{ width: size, height: size, mask: `url("${url}") center / contain no-repeat`, WebkitMask: `url("${url}") center / contain no-repeat` }}
+      />
+    )
+  } else if (url) {
+    glyph = <img src={url} alt="" aria-hidden draggable={false} width={size} height={size} className={cn('shrink-0 select-none', !tile && className)} />
+  } else {
+    const mark = agentId ? FALLBACK_MARKS[agentId] : undefined
+    const Icon = mark?.icon ?? SquareTerminal
+    glyph = <Icon size={size} strokeWidth={2} style={{ color: mark?.color ?? 'var(--color-fg-muted)' }} aria-hidden className={tile ? undefined : className} />
+  }
   if (!tile) return glyph
   return (
     <span className={cn('flex shrink-0 items-center justify-center rounded-lg border border-line bg-surface', className)} style={{ width: size + 14, height: size + 14 }}>
@@ -272,7 +288,6 @@ export function AgentIcon({ agentId, size = 14, tile, className }: { agentId?: s
     </span>
   )
 }
-
 export function SectionLabel({ children, action }: { children: ReactNode; action?: ReactNode }) {
   return (
     <div className="flex h-9 shrink-0 items-center justify-between pl-3.5 pr-2 text-xs font-medium text-fg-faint">

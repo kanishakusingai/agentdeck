@@ -68,6 +68,7 @@ export const AGENT_CATALOG: AgentDef[] = [
     bins: ['gemini'],
     headless: { args: [], editArgs: ['--yolo'] }
   },
+  { id: 'kiro', label: 'Kiro CLI', bins: ['kiro-cli'] },
   { id: 'cursor-agent', label: 'Cursor Agent', bins: ['cursor-agent'] },
   { id: 'copilot', label: 'GitHub Copilot', bins: ['copilot'] },
   { id: 'grok', label: 'Grok Build', bins: ['grok'] },
@@ -76,6 +77,13 @@ export const AGENT_CATALOG: AgentDef[] = [
   { id: 'kimi', label: 'Kimi Code', bins: ['kimi'] },
   { id: 'amp', label: 'Amp', bins: ['amp'] },
   { id: 'antigravity', label: 'Antigravity', bins: ['antigravity', 'agy'] },
+  { id: 'qwen', label: 'Qwen Code', bins: ['qwen'] },
+  { id: 'cline', label: 'Cline', bins: ['cline'] },
+  { id: 'kilocode', label: 'Kilo Code', bins: ['kilocode', 'kilo'] },
+  { id: 'goose', label: 'Goose', bins: ['goose'] },
+  { id: 'crush', label: 'Crush', bins: ['crush'] },
+  { id: 'auggie', label: 'Auggie', bins: ['auggie'] },
+  { id: 'codebuff', label: 'Codebuff', bins: ['codebuff'] },
   { id: 'aider', label: 'Aider', bins: ['aider'] }
 ]
 

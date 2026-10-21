@@ -31,28 +31,46 @@ async function launch(): Promise<{ app: ElectronApplication; page: Page }> {
 
 const shot = (page: Page, name: string) => page.screenshot({ path: join(shots, `${name}.png`) })
 
-test('the whole app: workspaces, terminals, layout, modes, persistence', async () => {
-  test.setTimeout(150_000)
+/** Visible pane tabs (other sessions' canvases stay mounted but hidden). */
+const tabs = (page: Page) => page.getByTestId('pane-tab').locator('visible=true')
+
+/** Stop a pane for good: right-click its tab › Close › confirm. */
+async function closePane(page: Page, title: RegExp | string): Promise<void> {
+  await tabs(page).filter({ hasText: title }).first().click({ button: 'right' })
+  await page.getByRole('menuitem', { name: /^Close (terminal|pane)$/ }).click()
+  await page.getByTestId('ask-confirm').click()
+  await expect(page.getByTestId('ask-dialog')).toBeHidden()
+}
+
+test('the whole app: projects, sessions, terminals, layout, modes, persistence', async () => {
+  test.setTimeout(180_000)
   let { app, page } = await launch()
 
-  // 1. A dark window with the title bar and mode switch
+  // 1. A dark window with the title bar and mode switch; first run asks to create a project
   await expect(page.getByText('AgentDeck').first()).toBeVisible()
   await expect(page.getByRole('tab', { name: 'Code' })).toHaveAttribute('aria-selected', 'true')
   await expect(page.getByText('Welcome to AgentDeck')).toBeVisible()
-  await expect(page.getByTestId('continue-without-folder')).toBeVisible()
+  await expect(page.getByTestId('project-name')).toBeFocused()
   await shot(page, '01-empty')
 
-  // 2. Add a workspace (folder picker stubbed for tests)
+  // 2. Name the project, then choose where it works (folder picker stubbed for tests)
+  await page.getByTestId('project-name').fill('Site')
+  await page.getByTestId('project-next').click()
+  await expect(page.getByTestId('continue-without-folder')).toBeVisible()
+  await shot(page, '01b-choose-folder')
   await page.getByTestId('add-first-workspace').click()
   await expect(page.getByTestId('workspace-row')).toHaveCount(1)
-  await expect(page.getByText('No panes open')).toBeVisible()
+  await expect(page.getByTestId('workspace-row')).toContainText('Site')
+  // The full folder path is shown
+  await expect(page.getByTestId('project-path')).toContainText('agentdeck-e2e-site-')
+  await expect(page.getByText('Nothing on screen in this session')).toBeVisible()
   await shot(page, '02-workspace')
 
-  // 3. A real terminal: typed commands produce output
+  // 3. A real terminal: typed commands produce output; the prompt shows the full folder path
   await page.getByTestId('new-terminal').click()
-  await expect(page.getByTestId('pane-tab')).toHaveCount(1)
+  await expect(tabs(page)).toHaveCount(1)
   await page.locator('.xterm').first().click()
-  await page.waitForTimeout(1500)
+  await expect(page.locator('.xterm-rows').first()).toContainText('agentdeck-e2e-site-', { timeout: 15000 })
   await page.keyboard.type('echo agentdeck-$(20+3)')
   await page.keyboard.press('Enter')
   await expect(page.locator('.xterm-rows').first()).toContainText('agentdeck-23', { timeout: 15000 })
@@ -70,6 +88,10 @@ test('the whole app: workspaces, terminals, layout, modes, persistence', async (
   await box.press('Enter')
   await expect(page.locator('.xterm-rows').first()).toContainText('composer-42', { timeout: 15000 })
   await expect(box).toHaveValue('')
+  // Alt+↑ brings the last message back
+  await box.press('Alt+ArrowUp')
+  await expect(box).toHaveValue('echo composer-$(40+2)')
+  await box.fill('')
   // "@" lists the workspace's files
   await box.pressSequentially('look at @not')
   await expect(page.getByRole('listbox', { name: 'Files' })).toBeVisible()
@@ -83,59 +105,77 @@ test('the whole app: workspaces, terminals, layout, modes, persistence', async (
   await page.getByTestId('new-terminal').click()
   await page.getByTestId('new-terminal').click()
   await page.getByTestId('new-terminal').click()
-  await expect(page.getByTestId('pane-tab')).toHaveCount(4)
+  await expect(tabs(page)).toHaveCount(4)
   await page.waitForTimeout(500)
-  const sizes = await page.locator('.dv-groupview').evaluateAll((els) => els.map((e) => [Math.round(e.getBoundingClientRect().width), Math.round(e.getBoundingClientRect().height)]))
+  const rects = () =>
+    page.locator('[data-canvas]:not(.keep-hidden) .dv-groupview').evaluateAll((els) =>
+      els.map((e) => {
+        const r = e.getBoundingClientRect()
+        return [Math.round(r.x), Math.round(r.y), Math.round(r.width), Math.round(r.height)].join(',')
+      })
+    )
+  const sizes = (await rects()).map((r) => r.split(',').map(Number))
   expect(sizes).toHaveLength(4)
-  for (const [w, h] of sizes) {
-    expect(Math.abs(w - sizes[0][0])).toBeLessThanOrEqual(2)
-    expect(Math.abs(h - sizes[0][1])).toBeLessThanOrEqual(2)
+  for (const [, , w, h] of sizes) {
+    expect(Math.abs(w - sizes[0][2])).toBeLessThanOrEqual(2)
+    expect(Math.abs(h - sizes[0][3])).toBeLessThanOrEqual(2)
   }
   await shot(page, '03b-even-tiles')
 
-  // 4b. Full screen: one pane over the whole window, then back to the exact same sizes
-  const rects = () => page.locator('.dv-groupview').evaluateAll((els) => els.map((e) => { const r = e.getBoundingClientRect(); return [Math.round(r.x), Math.round(r.y), Math.round(r.width), Math.round(r.height)].join(',') }))
+  // 4b. Full screen: the terminal opens large over a see-through backdrop; the grid is untouched
   const rectsBefore = await rects()
-  await page.getByTestId('zoom-pane').nth(1).click()
-  await expect(page.getByTestId('rail-code')).toBeHidden()
-  await expect(page.getByTestId('new-terminal')).toBeHidden()
+  await page.getByTestId('zoom-pane').locator('visible=true').first().click()
+  await expect(page.getByTestId('fullscreen')).toBeVisible()
+  await expect(page.getByTestId('fullscreen').locator('.xterm')).toBeVisible()
+  await expect(page.getByTestId('fullscreen').locator('.xterm-rows')).toContainText('agentdeck-23')
   await shot(page, '03c-full-screen')
   await page.keyboard.press('F11')
-  await expect(page.getByTestId('rail-code')).toBeVisible()
-  await expect(page.getByTestId('pane-tab')).toHaveCount(4)
+  await expect(page.getByTestId('fullscreen')).toBeHidden()
+  await expect(tabs(page)).toHaveCount(4)
   await expect.poll(rects).toEqual(rectsBefore)
+  // The terminal is back in its pane
+  await expect(page.locator('.xterm-rows').first()).toContainText('agentdeck-23')
 
-  // 4c. Projects: right-click a terminal › Move to project › New project…
-  await page.getByTestId('pane-row').nth(1).click({ button: 'right' })
+  // 4c. The × only takes a pane off the screen; it keeps running and comes back from the side panel
+  await tabs(page).nth(1).hover()
+  await page.getByRole('button', { name: /^Remove Terminal 2 from screen/ }).click()
+  await expect(tabs(page)).toHaveCount(3)
+  await expect(page.getByTestId('pane-row-offscreen')).toHaveCount(1)
+  await expect(page.getByTestId('dashboard-row')).toHaveCount(4)
+  await shot(page, '03d-off-screen')
+  await page.getByTestId('pane-row-offscreen').click()
+  await expect(tabs(page)).toHaveCount(4)
+  await expect(page.getByTestId('pane-row-offscreen')).toHaveCount(0)
+
+  // 4d. Sessions: right-click a terminal › Move to session › New session
+  await page.getByTestId('pane-row').filter({ hasText: 'Terminal 3' }).click({ button: 'right' })
   await expect(page.getByTestId('context-menu')).toBeVisible()
-  await page.getByRole('menuitem', { name: 'Move to project' }).click()
-  await page.getByRole('menuitem', { name: 'New project…' }).click()
-  await expect(page.getByTestId('ask-dialog')).toBeVisible()
-  await page.getByLabel('Project name').fill('Backend')
-  await shot(page, '03d-new-project')
-  await page.getByTestId('ask-confirm').click()
-  const project = page.getByTestId('project-row').filter({ hasText: 'Backend' })
-  await expect(project).toBeVisible()
-  await expect(project.getByTestId('pane-row')).toHaveCount(1)
-  // Another terminal goes into the same project from the pane tab's right-click menu
-  await page.getByTestId('pane-tab').nth(2).click({ button: 'right' })
-  await page.getByRole('menuitem', { name: 'Move to project' }).click()
-  await page.getByRole('menuitem', { name: 'Backend' }).click()
-  await expect(project.getByTestId('pane-row')).toHaveCount(2)
-  await shot(page, '03e-project-in-rail')
-  // Closing from the right-click menu asks first, in the app's own dialog
-  await page.getByTestId('pane-row').first().click({ button: 'right' })
+  await page.getByRole('menuitem', { name: 'Move to session' }).click()
+  await page.getByRole('menuitem', { name: 'New session' }).click()
+  await expect(page.getByTestId('session-tab')).toHaveCount(2)
+  await expect(page.getByTestId('session-tab').nth(1)).toHaveAttribute('aria-selected', 'true')
+  await expect(tabs(page)).toHaveCount(1)
+  await expect(tabs(page).first()).toContainText('Terminal 3')
+  await shot(page, '03e-session-2')
+  // Drag it back onto Session 1 in the side panel
+  await page.getByTestId('pane-row').filter({ hasText: 'Terminal 3' }).dragTo(page.getByTestId('session-row').first())
+  await expect(page.getByTestId('session-tab').first()).toHaveAttribute('aria-selected', 'true')
+  await expect(tabs(page)).toHaveCount(4)
+  await shot(page, '03f-dragged-back')
+
+  // Closing for good asks first, in the app's own dialog
+  await tabs(page).first().click({ button: 'right' })
   await page.getByRole('menuitem', { name: 'Close terminal' }).click()
   await expect(page.getByTestId('ask-dialog')).toContainText('The program running in this terminal stops')
-  await shot(page, '03f-close-confirm')
+  await shot(page, '03g-close-confirm')
   await page.getByRole('button', { name: 'Cancel' }).click()
   await expect(page.getByTestId('ask-dialog')).toBeHidden()
-  await expect(page.getByTestId('pane-tab')).toHaveCount(4)
+  await expect(tabs(page)).toHaveCount(4)
 
   await page.getByTestId('tidy').click()
-  await expect(page.getByTestId('pane-tab')).toHaveCount(4)
+  await expect(tabs(page)).toHaveCount(4)
   // Tidy keeps processes alive: the first terminal still shows its output
-  await expect(page.locator('.xterm-rows').first()).toContainText('agentdeck-23')
+  await expect(page.locator('.xterm-rows').locator('visible=true').first()).toContainText('agentdeck-23')
 
   // 5. Dashboard lists every running pane
   await expect(page.getByTestId('dashboard-row')).toHaveCount(4)
@@ -143,12 +183,13 @@ test('the whole app: workspaces, terminals, layout, modes, persistence', async (
   await shot(page, '03-code-mode')
 
   // 6. Closing a pane stops its process
-  await page.getByRole('button', { name: /^Close Terminal/ }).first().click()
+  await closePane(page, 'Terminal 4')
   await expect(page.getByTestId('dashboard-row')).toHaveCount(3)
 
-  // 7. Launch-agent menu lists the catalog
+  // 7. Launch-agent menu lists the catalog, Kiro CLI included
   await page.getByTestId('launch-agent').first().click()
   await expect(page.getByRole('menuitem', { name: /Aider/ })).toBeVisible()
+  await expect(page.getByRole('menuitem', { name: /Kiro CLI/ })).toBeVisible()
   await shot(page, '04-launch-menu')
 
   // 7b. Launching an agent opens it in a pane; a usage limit becomes a choice
@@ -170,7 +211,7 @@ test('the whole app: workspaces, terminals, layout, modes, persistence', async (
   await claudeBox.fill('')
   await page.getByRole('button', { name: 'Dismiss' }).click()
   await expect(page.getByText('Usage limit reached.', { exact: true })).toBeHidden()
-  await page.getByRole('button', { name: /^Close Claude Code/ }).click()
+  await closePane(page, 'Claude Code')
   await expect(page.getByTestId('dashboard-row')).toHaveCount(3)
 
   // 8. Browser tab in the sidebar
@@ -198,14 +239,14 @@ test('the whole app: workspaces, terminals, layout, modes, persistence', async (
   await shot(page, '08-routine-editor')
   await page.keyboard.press('Escape')
 
-  // 11. Settings: add a named account and make it the default
+  // 11. Settings: add a named account and make it the default; the full-path switch is there
   await page.keyboard.press('Control+,')
   await expect(page.getByRole('dialog')).toContainText('Agents & accounts')
   await shot(page, '09-settings')
   await page.getByLabel('New Codex account name').fill('Work')
   await page.getByRole('button', { name: 'Add account' }).nth(1).click()
   // Adding an account opens the provider's own sign-in in a terminal pane
-  await expect(page.getByTestId('pane-tab').filter({ hasText: 'Sign in · Work' })).toBeVisible()
+  await expect(tabs(page).filter({ hasText: 'Sign in · Work' })).toBeVisible()
   await shot(page, '09b-sign-in-pane')
   await page.keyboard.press('Control+,')
   await expect(page.getByRole('button', { name: 'Work', exact: true })).toBeVisible()
@@ -214,36 +255,43 @@ test('the whole app: workspaces, terminals, layout, modes, persistence', async (
   await shot(page, '09c-dropdown')
   await page.getByRole('option', { name: 'Work' }).click()
   await expect(page.getByLabel('Default Codex account')).toContainText('Work')
+  await page.getByRole('button', { name: 'Terminal & browser' }).click()
+  await expect(page.getByRole('switch', { name: 'Show the full folder path' })).toBeChecked()
+  await shot(page, '09d-terminal-settings')
   await page.keyboard.press('Escape')
-  await page.getByRole('button', { name: /^Close Sign in/ }).click()
+  await closePane(page, 'Sign in')
   await page.getByRole('tab', { name: 'Agent' }).click()
 
-  // 12. Restart: workspace and mode are remembered
+  // 12. Restart: project, sessions and mode are remembered
   await app.close()
   ;({ app, page } = await launch())
   await expect(page.getByRole('tab', { name: 'Agent' })).toHaveAttribute('aria-selected', 'true')
   await page.getByRole('tab', { name: 'Code' }).click()
   await expect(page.getByTestId('workspace-row')).toHaveCount(1)
+  await expect(page.getByTestId('session-tab')).toHaveCount(2)
   // The saved layout comes back with fresh shells in each pane
-  await expect(page.getByTestId('pane-tab')).toHaveCount(3)
-  // Projects and their panes survive a restart
-  await expect(page.getByTestId('project-row').filter({ hasText: 'Backend' })).toBeVisible()
-  // Restored panes belong to their workspace (and start in its folder)
-  await expect(page.getByTestId('dashboard-row').first()).toContainText('agentdeck-e2e-site-')
+  await expect(tabs(page)).toHaveCount(3)
+  // Restored panes belong to their project
+  await expect(page.getByTestId('dashboard-row').first()).toContainText('Site')
 
-  // 13. Continue without a folder: a scratch workspace is added and opened
+  // 13. A second project without a folder, from the side panel's “New project”
   await page.getByTestId('add-workspace').click()
-  await page.getByRole('menuitem', { name: /Continue without a folder/ }).click()
+  await expect(page.getByTestId('new-project-dialog')).toBeVisible()
+  await page.getByTestId('new-project-dialog').getByTestId('project-name').fill('Notes')
+  await page.getByTestId('new-project-dialog').getByTestId('project-next').click()
+  await shot(page, '10a-new-project-dialog')
+  await page.getByTestId('new-project-dialog').getByTestId('continue-without-folder').click()
+  await expect(page.getByTestId('new-project-dialog')).toBeHidden()
   await expect(page.getByTestId('workspace-row')).toHaveCount(2)
-  // Removing a workspace asks in the app's own dialog; Cancel keeps it
+  await expect(page.getByTestId('workspace-row').filter({ hasText: 'Notes' })).toBeVisible()
+  // Removing a project asks in the app's own dialog; Cancel keeps it
   await page.getByRole('button', { name: /options$/ }).first().click()
-  await page.getByRole('menuitem', { name: 'Remove from AgentDeck' }).click()
+  await page.getByRole('menuitem', { name: 'Remove project' }).click()
   await expect(page.getByTestId('ask-dialog')).toContainText('Your files stay where they are')
-  await shot(page, '10b-remove-workspace')
+  await shot(page, '10b-remove-project')
   await page.keyboard.press('Escape')
   await expect(page.getByTestId('workspace-row')).toHaveCount(2)
-  await expect(page.getByTestId('workspace-row').filter({ hasText: 'Home' })).toBeVisible()
-  await expect(page.getByText('No panes open').locator('visible=true').first()).toBeVisible()
-  await shot(page, '10-home-folder')
+  await expect(page.getByText('Nothing on screen in this session').locator('visible=true').first()).toBeVisible()
+  await shot(page, '10-second-project')
   await app.close()
 })

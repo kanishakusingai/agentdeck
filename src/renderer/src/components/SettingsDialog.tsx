@@ -7,7 +7,7 @@ import { openTerminal } from '../lib/canvas'
 import { cn } from '../lib/cn'
 import { errorText, refreshAgents, saveSettings, toast, useApp, type SettingsSection } from '../lib/store'
 import { preloadModel, useVoice } from '../voice/dictation'
-import { Button, Field, Input, Kbd, Select } from './ui'
+import { Button, Field, Input, Kbd, Select, Toggle } from './ui'
 import { askConfirm } from './Ask'
 
 const SECTIONS: { id: SettingsSection; label: string; icon: typeof Mic }[] = [
@@ -279,6 +279,17 @@ function TerminalSection() {
             </Select>
           </Field>
         </div>
+        {settings.shell !== 'cmd' && settings.shell !== 'bash' && (
+          <div className="flex items-start justify-between gap-6 rounded-xl border border-line bg-surface px-4 py-3">
+            <div>
+              <div className="text-[13px] font-medium text-fg">Show the full folder path</div>
+              <div className="mt-0.5 text-xs leading-relaxed text-fg-muted">
+                On: the whole path (e.g. <span className="font-mono text-fg-faint">C:\Users\you\Projects\site</span>) sits on its own line above <span className="font-mono text-fg-faint">PS&gt;</span>. Off: only the folder name (<span className="font-mono text-fg-faint">PS site&gt;</span>).
+              </div>
+            </div>
+            <Toggle checked={settings.fullPathPrompt !== false} onChange={(v) => void saveSettings({ fullPathPrompt: v })} label="Show the full folder path" />
+          </div>
+        )}
       </Group>
       <Group title="Docked browser">
         <Field label="Home address" hint="Where the sidebar browser opens — usually your app's dev server.">

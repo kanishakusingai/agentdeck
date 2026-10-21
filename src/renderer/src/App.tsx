@@ -11,7 +11,10 @@ import { SettingsDialog } from './components/SettingsDialog'
 import { ThreadMain, ThreadRail } from './components/thread/ThreadMode'
 import { TitleBar } from './components/TitleBar'
 import { TooltipProvider } from './components/ui'
-import { arrange, canvasFor, openTerminal, toggleZoom } from './lib/canvas'
+import { activeSessionId, arrange, canvasFor, openTerminal, toggleZoom } from './lib/canvas'
+import { sessionsOf } from '@shared/types'
+import { FullScreenTerminal } from './components/code/FullScreen'
+import { NewProjectDialog, openNewProject } from './components/code/NewProject'
 import { cn } from './lib/cn'
 import { boot, setMode, toggleRail, toggleSidebar, useApp } from './lib/store'
 import { installPushToTalk } from './voice/dictation'
@@ -23,11 +26,11 @@ function useShortcuts(): void {
       // F11: show the active pane over the whole window (again to go back).
       if (e.key === 'F11' && !ctrl && !e.shiftKey && !e.altKey) {
         const { snapshot, zoomed } = useApp.getState()
-        const wsId = zoomed ?? snapshot?.ui.activeWorkspaceId
-        if (!wsId || (snapshot?.ui.mode !== 'code' && !zoomed)) return
+        const wsId = snapshot?.ui.activeWorkspaceId
+        if (!zoomed && (!wsId || snapshot?.ui.mode !== 'code')) return
         e.preventDefault()
         e.stopPropagation()
-        return toggleZoom(wsId)
+        return toggleZoom(wsId ? activeSessionId(wsId) : '')
       }
       if (!ctrl) return
       const { snapshot } = useApp.getState()
@@ -44,12 +47,13 @@ function useShortcuts(): void {
       if (e.shiftKey && k === 'b') return run(() => toggleRail())
       if (!e.shiftKey && k === ',') return run(() => useApp.setState({ settingsOpen: 'agents' }))
       if (!e.shiftKey && k === 'o') return run(() => void addWorkspace())
+      if (!e.shiftKey && k === 'n') return run(() => openNewProject())
       if (!e.shiftKey || !wsId) return
       if (k === 't') return run(() => void openTerminal({ workspaceId: wsId }))
       if (k === 'a') return run(() => void openTerminal({ workspaceId: wsId, agentId: 'claude' }))
-      if (k === 'l') return run(() => arrange(wsId))
+      if (k === 'l') return run(() => arrange(activeSessionId(wsId)))
       if (k === '|' || k === '\\' || k === '_' || k === '-') {
-        const ref = canvasFor(wsId)?.activePanel?.id
+        const ref = canvasFor(activeSessionId(wsId))?.activePanel?.id
         return run(() => void openTerminal({ workspaceId: wsId, referencePanel: ref, direction: k === '_' || k === '-' ? 'below' : 'right' }))
       }
     }
@@ -80,16 +84,18 @@ function Toasts() {
 function CodeMain() {
   const workspaces = useApp((s) => s.snapshot!.workspaces)
   const activeId = useApp((s) => s.snapshot!.ui.activeWorkspaceId)
-  const zoomed = useApp((s) => s.zoomed !== null && s.zoomed === activeId)
+  const activeSessions = useApp((s) => s.snapshot!.ui.activeSessions)
   if (workspaces.length === 0) return <Welcome />
+  void activeSessions
   return (
     <div className="flex h-full min-h-0 flex-col gap-2">
-      {activeId && !zoomed && <CanvasToolbar workspaceId={activeId} />}
+      {activeId && <CanvasToolbar workspaceId={activeId} />}
       <div className="relative min-h-0 flex-1">
-        {/* Every workspace keeps its canvas mounted so terminals keep running and stay intact. */}
-        {workspaces.map((w) => (
-          <Canvas key={w.id} workspaceId={w.id} visible={w.id === activeId} />
-        ))}
+        {/* Every session of every project keeps its canvas mounted so terminals keep running. */}
+        {workspaces.flatMap((w) => {
+          const shown = activeSessionId(w.id)
+          return sessionsOf(w).map((s) => <Canvas key={s.id} workspaceId={w.id} sessionId={s.id} visible={w.id === activeId && s.id === shown} />)
+        })}
       </div>
     </div>
   )
@@ -101,9 +107,8 @@ export function App() {
   const hasWorkspaces = useApp((s) => (s.snapshot?.workspaces.length ?? 0) > 0)
   const railOpen = useApp((s) => s.snapshot?.ui.railOpen !== false)
   const sidebarOpen = useApp((s) => Boolean(s.snapshot?.ui.sidebarOpen))
-  // A pane shown full screen hides everything else in Code mode.
-  const zoomed = useApp((s) => s.zoomed !== null && s.zoomed === s.snapshot?.ui.activeWorkspaceId && s.snapshot?.ui.mode === 'code')
   useShortcuts()
+
 
   useEffect(() => {
     void boot()
@@ -113,8 +118,8 @@ export function App() {
   if (!ready || !mode) return <div className="h-full bg-bg" />
 
   // With no workspace yet, Code mode is a full-width welcome screen.
-  const showRail = railOpen && (mode !== 'code' || hasWorkspaces) && !zoomed
-  const showSidebar = mode === 'code' && sidebarOpen && hasWorkspaces && !zoomed
+  const showRail = railOpen && (mode !== 'code' || hasWorkspaces)
+  const showSidebar = mode === 'code' && sidebarOpen && hasWorkspaces
 
   return (
     <TooltipProvider>
@@ -153,6 +158,8 @@ export function App() {
       </div>
       <SettingsDialog />
       <AskHost />
+      <NewProjectDialog />
+      {mode === 'code' && <FullScreenTerminal />}
       <Toasts />
     </TooltipProvider>
   )

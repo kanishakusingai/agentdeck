@@ -14,13 +14,24 @@ export interface Workspace {
   /** Per-provider account override for agents launched in this workspace. */
   accountOverrides: Partial<Record<Provider, string>>
   createdAt: number
-  /** The user's own groups of panes inside this workspace (a pane points to one by id). */
-  projects?: Project[]
+  /**
+   * Separate screens inside this project, each with its own panes (up to MAX_PANES_PER_SESSION).
+   * The first session's id is the workspace id, so older saved layouts keep working.
+   */
+  sessions?: Session[]
 }
 
-export interface Project {
+export interface Session {
   id: string
   name: string
+}
+
+/** A session holds at most this many panes. */
+export const MAX_PANES_PER_SESSION = 8
+
+/** The sessions of a workspace (always at least one). */
+export function sessionsOf(ws: Pick<Workspace, 'id' | 'sessions'>): Session[] {
+  return ws.sessions?.length ? ws.sessions : [{ id: ws.id, name: 'Session 1' }]
 }
 
 export interface HeadlessSpec {
@@ -160,6 +171,8 @@ export interface Settings {
   whisperModel: string
   enhanceAgentId: string
   browserHomeUrl: string
+  /** PowerShell prompt shows the whole folder path (on) or just the folder name (off). */
+  fullPathPrompt: boolean
 }
 
 export type SidebarTab = 'browser' | 'dashboard'
@@ -172,6 +185,8 @@ export interface UiState {
   /** Right sidebar (dashboard / browser) in Code mode. */
   sidebarOpen: boolean
   sidebarTab: SidebarTab
+  /** The session shown for each project (workspace id → session id). */
+  activeSessions?: Record<string, string>
 }
 
 export interface AppData {
@@ -191,7 +206,8 @@ export const DEFAULT_SETTINGS: Settings = {
   pushToTalkKey: 'F9',
   whisperModel: 'Xenova/whisper-base.en',
   enhanceAgentId: 'claude',
-  browserHomeUrl: 'http://localhost:3000'
+  browserHomeUrl: 'http://localhost:3000',
+  fullPathPrompt: true
 }
 
 export const DEFAULT_UI: UiState = {

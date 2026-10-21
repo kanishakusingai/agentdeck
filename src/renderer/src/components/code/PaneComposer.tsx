@@ -7,7 +7,7 @@ import { cn } from '../../lib/cn'
 import { writePty } from '../../lib/pty-bus'
 import { errorText, toast, useApp } from '../../lib/store'
 import { registerComposer, toggleRecording, useVoice } from '../../voice/dictation'
-import { IconButton, Kbd, menuSurface, Tip } from '../ui'
+import { AgentIcon, IconButton, Kbd, menuSurface, Tip } from '../ui'
 
 export interface PaneComposerHandle {
   focus(): void
@@ -37,6 +37,8 @@ type Suggestion =
   | { kind: 'file'; id: string; path: string }
 
 const MAX_HEIGHT = 168
+/** Messages sent from each pane, newest last (Alt+↑ / Alt+↓ bring them back). */
+const sentHistory = new Map<string, string[]>()
 /** Height of the one-line box (padding + one 13px line), so the first letter doesn't change it. */
 const ONE_LINE = 36
 
@@ -58,6 +60,7 @@ export const PaneComposer = forwardRef<PaneComposerHandle, Props>(function PaneC
   const ref = useRef<HTMLTextAreaElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
   const filesLoadedAt = useRef(0)
+  const historyAt = useRef(-1)
   const recording = useVoice((s) => s.ptt.phase === 'recording')
   const pttKey = useApp((s) => s.snapshot!.settings.pushToTalkKey)
   const agent = agentById(agentId)
@@ -156,8 +159,24 @@ export const PaneComposer = forwardRef<PaneComposerHandle, Props>(function PaneC
     }
     writePty(ptyId, asPastedMessage(message))
     setTimeout(() => writePty(ptyId, '\r'), 60)
+    const past = (sentHistory.get(ptyId) ?? []).filter((m) => m !== message)
+    sentHistory.set(ptyId, [...past, message].slice(-50))
+    historyAt.current = -1
     setValue('', 0)
     setDismissed(null)
+  }
+
+  /** Alt+↑ / Alt+↓: step through what was sent from this pane before. */
+  const recall = (step: 1 | -1): void => {
+    const past = ptyId ? (sentHistory.get(ptyId) ?? []) : []
+    if (!past.length) return
+    const next = historyAt.current === -1 ? (step === -1 ? past.length - 1 : -1) : historyAt.current + step
+    if (next < 0 || next >= past.length) {
+      historyAt.current = -1
+      return setValue('', 0)
+    }
+    historyAt.current = next
+    setValue(past[next], past[next].length)
   }
 
   const choose = (s: Suggestion, run: boolean): void => {
@@ -176,6 +195,11 @@ export const PaneComposer = forwardRef<PaneComposerHandle, Props>(function PaneC
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>): void => {
     // Typing in a different language (IME) — let it compose.
     if (e.nativeEvent.isComposing) return
+    if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+      e.preventDefault()
+      recall(e.key === 'ArrowUp' ? -1 : 1)
+      return
+    }
     if (open && suggestions.length) {
       if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
         e.preventDefault()
@@ -346,8 +370,14 @@ export const PaneComposer = forwardRef<PaneComposerHandle, Props>(function PaneC
           <IconButton label="Mention a file ( @ )" tipSide="top" onClick={() => insertTrigger('@')} className="h-7 w-7 text-fg-faint">
             <AtSign size={14} />
           </IconButton>
-          <span className="hidden min-w-0 truncate pl-1 text-2xs text-fg-faint @[520px]:inline">
-            <Kbd>Enter</Kbd> send · <Kbd>Shift</Kbd>+<Kbd>Enter</Kbd> new line · <Kbd>Esc</Kbd> to agent · hold <Kbd>{pttKey}</Kbd> to talk
+          {agentId && (
+            <span className="ml-0.5 hidden h-6 shrink-0 items-center gap-1.5 rounded-md border border-line bg-panel px-2 text-2xs text-fg-muted @[380px]:flex" title="Messages from this box go to this agent">
+              <AgentIcon agentId={agentId} size={11} />
+              {agent?.label ?? agentId}
+            </span>
+          )}
+          <span className="hidden min-w-0 truncate pl-1 text-2xs text-fg-faint @[640px]:inline">
+            <Kbd>Enter</Kbd> send · <Kbd>Shift</Kbd>+<Kbd>Enter</Kbd> new line · <Kbd>Alt</Kbd>+<Kbd>↑</Kbd> last message · <Kbd>Esc</Kbd> to agent · hold <Kbd>{pttKey}</Kbd> to talk
           </span>
           <span className="flex-1" />
           <IconButton

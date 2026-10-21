@@ -34,7 +34,7 @@ const api = {
     add: call('workspaces:add'),
     addScratch: call('workspaces:addScratch'),
     rename: call('workspaces:rename'),
-    setProjects: call('workspaces:setProjects'),
+    setSessions: call('workspaces:setSessions'),
     remove: call('workspaces:remove'),
     setAccountOverride: call('workspaces:setAccountOverride'),
     reveal: call('workspaces:reveal')

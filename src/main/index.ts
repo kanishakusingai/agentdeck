@@ -48,7 +48,7 @@ function createWindow(): void {
     titleBarStyle: 'hidden',
     ...(process.platform === 'darwin'
       ? { trafficLightPosition: { x: 16, y: 16 } }
-      : { titleBarOverlay: { color: BG, symbolColor: '#d4d4d8', height: 38 } }),
+      : { titleBarOverlay: { color: BG, symbolColor: '#d4d4d8', height: 36 } }),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
@@ -131,19 +131,19 @@ function registerIpc(): void {
     if (isHttpUrl(url)) await shell.openExternal(url)
   })
 
-  handle('workspaces:add', async () => {
+  handle('workspaces:add', async (name) => {
     const folder = await pickFolder()
-    return folder ? core.addWorkspace(folder) : null
+    return folder ? core.addWorkspace(folder, typeof name === 'string' ? name : undefined) : null
   })
-  handle('workspaces:addScratch', () => {
+  handle('workspaces:addScratch', (name) => {
     // No folder chosen: work in the user's own folder (C:\Users\<name>).
     // Tests use a folder inside their throwaway data folder instead.
     const dir = process.env.AGENTDECK_USER_DATA ? join(app.getPath('userData'), 'Home') : app.getPath('home')
     mkdirSync(dir, { recursive: true })
-    return core.addWorkspace(dir, 'Home')
+    return core.addWorkspace(dir, typeof name === 'string' && name.trim() ? name : 'Home')
   })
   handle('workspaces:rename', (id, name) => core.renameWorkspace(id, name))
-  handle('workspaces:setProjects', (id, projects) => core.setProjects(id, projects))
+  handle('workspaces:setSessions', (id, sessions) => core.setSessions(id, sessions))
   handle('workspaces:remove', (id) => core.removeWorkspace(id))
   handle('workspaces:setAccountOverride', (id, p, a) => core.setAccountOverride(id, p, a))
   handle('workspaces:reveal', (id) => {

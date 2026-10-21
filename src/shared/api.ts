@@ -4,8 +4,8 @@ import type {
   DetectedAgent,
   Provider,
   PtyCreateOptions,
-  Project,
   PtyInfo,
+  Session,
   Routine,
   RoutineRun,
   Settings,
@@ -39,11 +39,13 @@ export interface InvokeChannels {
   'app:setUi': (ui: UiState) => void
   'app:setSettings': (settings: Settings) => void
   'app:openExternal': (url: string) => void
-  'workspaces:add': () => string | null
+  /** Pick a folder for a new project called 
+ame (null = the user cancelled). */
+  'workspaces:add': (name?: string) => string | null
   /** "Continue without a folder": opens the user's own folder (C:\Users\<name>). */
-  'workspaces:addScratch': () => string
+  'workspaces:addScratch': (name?: string) => string
   'workspaces:rename': (id: string, name: string) => void
-  'workspaces:setProjects': (id: string, projects: Project[]) => void
+  'workspaces:setSessions': (id: string, sessions: Session[]) => void
   'workspaces:remove': (id: string) => void
   'workspaces:setAccountOverride': (id: string, provider: Provider, accountId: string | null) => void
   'workspaces:reveal': (id: string) => void
@@ -112,7 +114,7 @@ export interface AgentDeckApi {
     add: Invoke<'workspaces:add'>
     addScratch: Invoke<'workspaces:addScratch'>
     rename: Invoke<'workspaces:rename'>
-    setProjects: Invoke<'workspaces:setProjects'>
+    setSessions: Invoke<'workspaces:setSessions'>
     remove: Invoke<'workspaces:remove'>
     setAccountOverride: Invoke<'workspaces:setAccountOverride'>
     reveal: Invoke<'workspaces:reveal'>

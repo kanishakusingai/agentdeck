@@ -3,7 +3,10 @@ import type { IDockviewPanelProps } from 'dockview-react'
 import { useEffect, useRef, useState } from 'react'
 import { setPanelPty, type PanelParams } from '../../lib/canvas'
 import { errorText, toast, useApp } from '../../lib/store'
-import { attachTerminal, fitTerminal, setTerminalFontSize } from '../../lib/terminals'
+import { attachTerminal, fitTerminal, setTerminalFontSize, useTerminalReady } from '../../lib/terminals'
+import { agentById } from '@shared/agents'
+import { Maximize2 } from 'lucide-react'
+import { AgentIcon } from '../ui'
 import { LimitBanner } from './LimitBanner'
 import { PaneComposer, type PaneComposerHandle } from './PaneComposer'
 
@@ -84,10 +87,22 @@ export function TerminalPanel(props: IDockviewPanelProps) {
 
   useEffect(() => setTerminalFontSize(fontSize), [fontSize])
 
+  const ready = useTerminalReady((s) => (ptyId ? Boolean(s[ptyId]) : false))
+  const fullScreen = useApp((s) => Boolean(ptyId) && s.zoomed?.ptyId === ptyId)
+
   return (
     <div ref={panelRef} className="flex h-full min-h-0 flex-col bg-panel" data-pty-id={ptyId}>
       {ptyId && <LimitBanner ptyId={ptyId} />}
-      <div ref={host} className="min-h-0 flex-1 overflow-hidden" onMouseDown={() => termRef.current?.focus()} />
+      <div className="relative min-h-0 flex-1">
+        <div ref={host} className="absolute inset-0 overflow-hidden" onMouseDown={() => termRef.current?.focus()} />
+        {!ready && !fullScreen && <Starting agentId={info?.agentId ?? params.agentId} />}
+        {fullScreen && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-xs text-fg-faint">
+            <Maximize2 size={16} />
+            Shown in full screen
+          </div>
+        )}
+      </div>
       <PaneComposer
         ref={composerRef}
         ptyId={ptyId}
@@ -95,6 +110,30 @@ export function TerminalPanel(props: IDockviewPanelProps) {
         agentId={info?.agentId ?? params.agentId}
         active={active}
       />
+    </div>
+  )
+}
+
+/** Shown until the process prints something, so a slow agent doesn't look broken. */
+function Starting({ agentId }: { agentId?: string }) {
+  const [slow, setSlow] = useState(false)
+  useEffect(() => {
+    const t = setTimeout(() => setSlow(true), 12_000)
+    return () => clearTimeout(t)
+  }, [])
+  const label = agentById(agentId)?.label ?? 'terminal'
+  return (
+    <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-panel" data-testid="pane-starting">
+      <div className="flex w-[240px] flex-col items-center gap-3 text-center">
+        <AgentIcon agentId={agentId} size={22} tile />
+        <div className="text-[13px] font-medium text-fg">Starting {label}…</div>
+        <div className="h-1 w-full overflow-hidden rounded-full bg-hover">
+          <div className="boot-bar h-full w-2/5 rounded-full bg-linear-to-r from-transparent via-accent to-transparent" />
+        </div>
+        <div className="text-2xs leading-relaxed text-fg-faint">
+          {slow ? 'Still starting — the first launch can take up to a minute. It will appear here on its own.' : 'It will appear here in a moment.'}
+        </div>
+      </div>
     </div>
   )
 }

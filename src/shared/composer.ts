@@ -200,7 +200,44 @@ const OPENCODE: Spec[] = [
   ['undo', 'Undo the last change']
 ]
 
-const BUILTINS: Record<string, Spec[]> = { claude: CLAUDE, codex: CODEX, gemini: GEMINI, opencode: OPENCODE }
+const KIRO: Spec[] = [
+  ['agent', 'Choose or manage agents'],
+  ['clear', 'Clear the conversation'],
+  ['compact', 'Summarise the conversation to free up context'],
+  ['context', 'Show or change what is in context'],
+  ['editor', 'Write the message in your editor'],
+  ['help', 'Show help'],
+  ['hooks', 'Manage hooks'],
+  ['knowledge', 'Manage the knowledge base'],
+  ['load', 'Load a saved conversation'],
+  ['mcp', 'Show MCP servers'],
+  ['model', 'Choose the model'],
+  ['prompts', 'Use a saved prompt'],
+  ['quit', 'Quit Kiro CLI'],
+  ['save', 'Save this conversation'],
+  ['tangent', 'Start a side conversation'],
+  ['todos', 'Show the to-do list'],
+  ['tools', 'Show or trust tools'],
+  ['usage', 'Show usage']
+]
+
+const QWEN: Spec[] = [
+  ['auth', 'Change sign-in method'],
+  ['clear', 'Clear the screen'],
+  ['compress', 'Summarise the conversation to free up context'],
+  ['help', 'Show help'],
+  ['init', 'Create a context file for this project'],
+  ['mcp', 'List MCP servers'],
+  ['memory', 'Manage memory'],
+  ['model', 'Choose the model'],
+  ['quit', 'Quit'],
+  ['settings', 'Open settings'],
+  ['stats', 'Session statistics'],
+  ['theme', 'Change the colour theme'],
+  ['tools', 'List tools']
+]
+
+const BUILTINS: Record<string, Spec[]> = { claude: CLAUDE, codex: CODEX, gemini: GEMINI, opencode: OPENCODE, kiro: KIRO, qwen: QWEN }
 
 /** The built-in slash commands of an agent (none for a plain shell or unknown agents). */
 export function commandsFor(agentId: string | undefined): SlashCommand[] {

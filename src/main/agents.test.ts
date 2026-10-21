@@ -29,6 +29,12 @@ describe('detectAgents', () => {
     expect(agents.find((a) => a.id === 'aider')).toMatchObject({ installed: false, path: undefined })
   })
 
+  it('finds Kiro CLI and the other newer agents', () => {
+    const dir = fakeBin(['kiro-cli.exe', 'qwen.cmd', 'goose.exe'])
+    const agents = detectAgents({ PATH: dir, PATHEXT: '.EXE;.CMD' }, 'win32')
+    expect(agents.filter((a) => a.installed).map((a) => a.label)).toEqual(expect.arrayContaining(['Kiro CLI', 'Qwen Code', 'Goose']))
+  })
+
   it('searches every PATH entry and accepts alternative binary names', () => {
     const a = fakeBin([])
     const b = fakeBin(['agy.exe'])

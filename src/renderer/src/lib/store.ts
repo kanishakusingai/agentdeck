@@ -1,13 +1,20 @@
 import { create } from 'zustand'
 import type { AppSnapshot, RunSummary } from '@shared/api'
 import type { DetectedAgent, Mode, PtyInfo, Routine, Settings, SidebarTab, UiState, UsageLimitEvent } from '@shared/types'
+import type { PanelParams } from './canvas'
 
 export type PanelKind = 'terminal' | 'browser' | 'thread'
 
+/** A pane taken off the screen (its process keeps running); clicking it in the side panel brings it back. */
+export interface HiddenPane {
+  id: string
+  title: string
+  params: PanelParams
+}
+
 export interface PanelSummary {
   id: string
-  /** The project this pane is filed under (none = loose in the workspace). */
-  projectId?: string
+  agentId?: string
   kind: PanelKind
   title: string
   ptyId?: string
@@ -29,9 +36,11 @@ interface State {
   limits: Record<string, UsageLimitEvent>
   runs: RunSummary[]
   panels: Record<string, PanelSummary[]>
-  activePanel: { workspaceId: string; panelId: string } | null
-  /** Workspace whose maximised pane fills the whole window (rails and toolbar hidden). */
-  zoomed: string | null
+  activePanel: { workspaceId: string; sessionId: string; panelId: string } | null
+  /** Panes taken off the screen with their ×, per session: still running, listed in the side panel. */
+  hidden: Record<string, HiddenPane[]>
+  /** The terminal shown large over the app (full screen), if any. */
+  zoomed: { sessionId: string; panelId: string; ptyId: string } | null
   settingsOpen: SettingsSection | null
   selectedThreadId: string | null
   selectedRoutineId: string | null
@@ -50,6 +59,7 @@ export const useApp = create<State>(() => ({
   runs: [],
   panels: {},
   activePanel: null,
+  hidden: {},
   zoomed: null,
   settingsOpen: null,
   selectedThreadId: null,
@@ -77,6 +87,10 @@ function patchUi(patch: Partial<UiState>): void {
 
 export const setMode = (mode: Mode): void => patchUi({ mode })
 export const setActiveWorkspace = (activeWorkspaceId: string | undefined): void => patchUi({ activeWorkspaceId })
+export const setActiveSession = (workspaceId: string, sessionId: string): void => {
+  if (ui().activeSessions?.[workspaceId] === sessionId) return
+  patchUi({ activeSessions: { ...ui().activeSessions, [workspaceId]: sessionId } })
+}
 export const toggleSidebar = (open?: boolean): void => patchUi({ sidebarOpen: open ?? !ui().sidebarOpen })
 export const toggleRail = (open?: boolean): void => patchUi({ railOpen: open ?? !ui().railOpen })
 export const setSidebarTab = (sidebarTab: SidebarTab): void => patchUi({ sidebarTab, sidebarOpen: true })

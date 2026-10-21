@@ -10,7 +10,7 @@ import {
   SYSTEM_ACCOUNT_ID,
   type Account,
   type DetectedAgent,
-  type Project,
+  type Session,
   type Provider,
   type PtyCreateOptions,
   type PtyInfo,
@@ -114,10 +114,15 @@ export class AppCore {
 
   // ---------- workspaces ----------
 
+  /**
+   * Add a project. Without a name, opening a folder that is already a project just returns it;
+   * a named project is always new (several projects may share a folder, e.g. the user folder).
+   */
   addWorkspace(path: string, name?: string): string {
-    const existing = this.store.get('workspaces').find((w) => samePath(w.path, path))
+    const clean = name?.trim().slice(0, 60)
+    const existing = this.store.get('workspaces').find((w) => samePath(w.path, path) && (!clean || w.name === clean))
     if (existing) return existing.id
-    const ws: Workspace = { id: randomUUID(), name: name ?? (basename(path) || path), path, accountOverrides: {}, createdAt: Date.now() }
+    const ws: Workspace = { id: randomUUID(), name: clean || basename(path) || path, path, accountOverrides: {}, createdAt: Date.now() }
     this.store.update('workspaces', (list) => [...list, ws])
     this.broadcast()
     return ws.id
@@ -130,20 +135,29 @@ export class AppCore {
     this.broadcast()
   }
 
-  /** Save a workspace's projects (names trimmed and capped; unnamed or duplicate ids dropped). */
-  setProjects(id: string, projects: Project[]): void {
+  /** Save a project's sessions (names trimmed and capped; unnamed or duplicate ids dropped). */
+  setSessions(id: string, sessions: Session[]): void {
     const seen = new Set<string>()
-    const clean = (Array.isArray(projects) ? projects : [])
+    const clean = (Array.isArray(sessions) ? sessions : [])
       .map((p) => ({ id: String(p?.id ?? ''), name: String(p?.name ?? '').trim().slice(0, 60) }))
       .filter((p) => p.id && p.name && !seen.has(p.id) && Boolean(seen.add(p.id)))
-    this.store.update('workspaces', (list) => list.map((w) => (w.id === id ? { ...w, projects: clean } : w)))
+    this.store.update('workspaces', (list) => list.map((w) => (w.id === id ? { ...w, sessions: clean, projects: undefined } : w)))
+    // A deleted session's saved layout goes too (the first session's layout is keyed by the workspace id).
+    const keep = new Set([id, ...clean.map((c) => c.id)])
+    this.store.update('layouts', (layouts) =>
+      Object.fromEntries(Object.entries(layouts).filter(([key]) => keep.has(key) || !this.isSessionOf(key, id)))
+    )
     this.broadcast()
   }
 
+  /** Session ids are "<workspaceId>:<uuid>" (the first session is the workspace id itself). */
+  private isSessionOf(key: string, workspaceId: string): boolean {
+    return key === workspaceId || key.startsWith(`${workspaceId}:`)
+  }
   removeWorkspace(id: string): void {
     for (const info of [...this.infos.values()]) if (info.workspaceId === id) this.disposePty(info.id)
     this.store.update('workspaces', (list) => list.filter((w) => w.id !== id))
-    this.store.update('layouts', ({ [id]: _gone, ...rest }) => rest)
+    this.store.update('layouts', (layouts) => Object.fromEntries(Object.entries(layouts).filter(([key]) => !this.isSessionOf(key, id))))
     this.store.update('routines', (list) => list.map((r) => (r.workspaceId === id ? { ...r, enabled: false } : r)))
     this.broadcast()
   }
@@ -305,7 +319,7 @@ export class AppCore {
     }
 
     // Only the detected executable path and fixed, app-defined arguments reach the shell.
-    const launch = buildShellLaunch({ shell: settings.shell, command: agent?.path, commandArgs })
+    const launch = buildShellLaunch({ shell: settings.shell, command: agent?.path, commandArgs, fullPathPrompt: settings.fullPathPrompt !== false })
     const id = this.ptys.create({
       file: launch.file,
       args: launch.args,

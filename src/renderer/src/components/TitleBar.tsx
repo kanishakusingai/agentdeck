@@ -78,7 +78,7 @@ export function TitleBar() {
     // so a translated switch would sit in the wrong place and swallow clicks.
     // Windows draws its own minimise / maximise / close buttons over the right edge (titleBarOverlay).
     <header
-      className="drag grid h-11 shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-3"
+      className="drag grid h-12 shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-3"
       style={{ paddingLeft: isMac ? 84 : 12, paddingRight: isMac ? 8 : 150 }}
     >
       <div className="flex min-w-0 items-center gap-3">

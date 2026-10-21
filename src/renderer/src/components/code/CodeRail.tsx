@@ -1,16 +1,17 @@
-import { ChevronDown, Folder, FolderOpen, FolderPlus, Globe, MessagesSquare, MoreHorizontal, Pencil, Plus, Settings2, SquareTerminal, Trash2, UserRound, Zap } from 'lucide-react'
-import { useState } from 'react'
-import type { Project, Workspace } from '@shared/types'
+import { ChevronDown, EyeOff, FolderOpen, FolderPlus, Globe, Layers, MessagesSquare, MoreHorizontal, Pencil, Plus, Settings2, SquareTerminal, Trash2, UserRound } from 'lucide-react'
+import { useState, type DragEvent } from 'react'
+import { sessionsOf, type Session, type Workspace } from '@shared/types'
 import { tracker, useActivityClock } from '../../lib/activity'
-import { focusPanel, openTerminal } from '../../lib/canvas'
-import { createProject, deleteProject, renameProject } from '../../lib/projects'
+import { activeSessionId, focusPanel, moveToSession, openTerminal, showHiddenPane, showSession } from '../../lib/canvas'
 import { cn } from '../../lib/cn'
-import { errorText, setActiveWorkspace, toast, useApp, type PanelSummary } from '../../lib/store'
-import { askConfirm } from '../Ask'
-import { ActivityDot, ContextMenu, IconButton, Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger, SectionLabel, Tip } from '../ui'
+import { deleteSession, newSession, removeProject, renameProject, renameSession } from '../../lib/sessions'
+import { errorText, setActiveWorkspace, toast, useApp, type HiddenPane, type PanelSummary } from '../../lib/store'
+import { ActivityDot, AgentIcon, ContextMenu, IconButton, Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger, SectionLabel, Tip } from '../ui'
+import { openNewProject } from './NewProject'
 import { PaneMenuItems } from './PaneMenu'
 import { WorkspaceDialog } from './WorkspaceDialog'
 
+/** Ctrl+O: pick a folder; it becomes a project named after the folder. */
 export async function addWorkspace(): Promise<void> {
   try {
     const id = await window.api.workspaces.add()
@@ -20,7 +21,7 @@ export async function addWorkspace(): Promise<void> {
   }
 }
 
-/** Skip choosing a folder: work in AgentDeck's own scratch folder. */
+/** Start in the user's own folder without naming anything (Agent mode's quick start). */
 export async function continueWithoutFolder(): Promise<void> {
   try {
     setActiveWorkspace(await window.api.workspaces.addScratch())
@@ -30,158 +31,183 @@ export async function continueWithoutFolder(): Promise<void> {
 }
 
 const NO_PANELS: PanelSummary[] = []
-const NO_PROJECTS: Project[] = []
+const NO_HIDDEN: HiddenPane[] = []
+const DRAG_TYPE = 'application/x-agentdeck-pane'
 
-function PaneRow({ workspaceId, p, now, indent }: { workspaceId: string; p: PanelSummary; now: number; indent: boolean }) {
-  const info = useApp((s) => (p.ptyId ? s.ptys[p.ptyId] : undefined))
-  const isActive = useApp((s) => s.activePanel?.workspaceId === workspaceId && s.activePanel.panelId === p.id)
-  const Icon = p.kind === 'browser' ? Globe : MessagesSquare
+function startDrag(e: DragEvent, sessionId: string, paneId: string): void {
+  e.dataTransfer.setData(DRAG_TYPE, JSON.stringify({ sessionId, paneId }))
+  e.dataTransfer.effectAllowed = 'move'
+}
+
+function PaneRow({ sessionId, pane, now, offScreen }: { sessionId: string; pane: { id: string; title: string; kind: string; ptyId?: string; agentId?: string }; now: number; offScreen: boolean }) {
+  const info = useApp((s) => (pane.ptyId ? s.ptys[pane.ptyId] : undefined))
+  const isActive = useApp((s) => !offScreen && s.activePanel?.sessionId === sessionId && s.activePanel.panelId === pane.id)
+  const Icon = pane.kind === 'browser' ? Globe : pane.kind === 'thread' ? MessagesSquare : null
   return (
     <li>
-      <ContextMenu menu={<PaneMenuItems workspaceId={workspaceId} panelId={p.id} title={p.title} kind={p.kind} projectId={p.projectId} />}>
+      <ContextMenu menu={<PaneMenuItems sessionId={sessionId} paneId={pane.id} title={pane.title} kind={pane.kind} offScreen={offScreen} />}>
         <button
-          onClick={() => focusPanel(workspaceId, p.id)}
-          data-testid="pane-row"
+          draggable
+          onDragStart={(e) => startDrag(e, sessionId, pane.id)}
+          onClick={() => (offScreen ? void showHiddenPane(sessionId, pane.id) : focusPanel(sessionId, pane.id))}
+          data-testid={offScreen ? 'pane-row-offscreen' : 'pane-row'}
+          title={offScreen ? 'Off screen — still running. Click to show it again.' : undefined}
           className={cn(
-            'flex h-7 w-full items-center gap-2.5 rounded-md pr-2 text-left text-xs transition-colors',
-            indent ? 'pl-11' : 'pl-7',
-            isActive ? 'bg-hover font-medium text-fg' : 'text-fg-muted hover:bg-hover/60 hover:text-fg'
+            'flex h-7 w-full cursor-default items-center gap-2 rounded-md pl-9 pr-2 text-left text-xs transition-colors',
+            isActive ? 'bg-hover font-medium text-fg' : offScreen ? 'text-fg-faint hover:bg-hover/60 hover:text-fg-muted' : 'text-fg-muted hover:bg-hover/60 hover:text-fg'
           )}
         >
-          {info ? <ActivityDot activity={tracker.activity(info, now)} /> : p.kind === 'terminal' ? <span className="h-1.5 w-1.5 rounded-full bg-fg-faint" /> : <Icon size={12} className="shrink-0 text-fg-faint" />}
-          <span className="truncate">{p.title}</span>
+          {Icon ? <Icon size={12} className="shrink-0 text-fg-faint" /> : <AgentIcon agentId={info?.agentId ?? pane.agentId} size={12} className={offScreen ? 'opacity-50' : undefined} />}
+          <span className="min-w-0 flex-1 truncate">{pane.title}</span>
+          {offScreen ? <EyeOff size={11} className="shrink-0 text-fg-faint" /> : info && <ActivityDot activity={tracker.activity(info, now)} />}
         </button>
       </ContextMenu>
     </li>
   )
 }
 
-function ProjectSection({ workspaceId, project, panes, now }: { workspaceId: string; project: Project; panes: PanelSummary[]; now: number }) {
-  const [open, setOpen] = useState(true)
+function SessionBlock({ ws, session, now, showHeader }: { ws: Workspace; session: Session; now: number; showHeader: boolean }) {
+  const panes = useApp((s) => s.panels[session.id] ?? NO_PANELS)
+  const hidden = useApp((s) => s.hidden[session.id] ?? NO_HIDDEN)
+  const active = useApp((s) => {
+    void s.snapshot!.ui.activeSessions
+    return s.snapshot!.ui.activeWorkspaceId === ws.id && activeSessionId(ws.id) === session.id
+  })
+  const [over, setOver] = useState(false)
+
+  const onDrop = (e: DragEvent): void => {
+    setOver(false)
+    const raw = e.dataTransfer.getData(DRAG_TYPE)
+    if (!raw) return
+    e.preventDefault()
+    const { sessionId, paneId } = JSON.parse(raw) as { sessionId: string; paneId: string }
+    void moveToSession(sessionId, paneId, session.id)
+  }
+
   return (
-    <li data-testid="project-row">
-      <ContextMenu
-        menu={
-          <>
-            <MenuItem onSelect={() => void openTerminal({ workspaceId, projectId: project.id })}>
-              <SquareTerminal size={13} className="text-fg-muted" /> New terminal here
-            </MenuItem>
-            <MenuItem onSelect={() => void renameProject(workspaceId, project.id)}>
-              <Pencil size={13} className="text-fg-muted" /> Rename
-            </MenuItem>
-            <MenuSeparator />
-            <MenuItem danger onSelect={() => void deleteProject(workspaceId, project.id)}>
-              <Trash2 size={13} /> Delete project
-            </MenuItem>
-          </>
-        }
-      >
-        <div className="group flex h-7 items-center rounded-md pl-5 pr-1 text-xs text-fg-muted hover:bg-hover/60 hover:text-fg">
-          <button onClick={() => setOpen(!open)} className="flex min-w-0 flex-1 items-center gap-1.5 text-left" aria-expanded={open}>
-            <ChevronDown size={12} className={cn('shrink-0 text-fg-faint transition-transform', !open && '-rotate-90')} />
-            {open ? <FolderOpen size={13} className="shrink-0 text-accent-strong" /> : <Folder size={13} className="shrink-0 text-accent-strong" />}
-            <span className="truncate font-medium">{project.name}</span>
-            <span className="tabular ml-1 text-2xs text-fg-faint">{panes.length}</span>
-          </button>
-          <Tip label="New terminal in this project">
-            <button
-              aria-label={`New terminal in ${project.name}`}
-              onClick={() => void openTerminal({ workspaceId, projectId: project.id })}
-              className="rounded p-1 text-fg-faint opacity-0 hover:bg-hover hover:text-fg focus:opacity-100 group-hover:opacity-100"
-            >
-              <Plus size={12} />
+    <li
+      data-testid="session-row"
+      onDragOver={(e) => {
+        if (!e.dataTransfer.types.includes(DRAG_TYPE)) return
+        e.preventDefault()
+        e.dataTransfer.dropEffect = 'move'
+        setOver(true)
+      }}
+      onDragLeave={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setOver(false)
+      }}
+      onDrop={onDrop}
+      className={cn('rounded-lg transition-[background-color,box-shadow]', over && 'bg-accent/10 shadow-[inset_0_0_0_1px_rgba(59,130,246,0.55)]')}
+    >
+      {showHeader && (
+        <ContextMenu
+          menu={
+            <>
+              <MenuItem onSelect={() => void openTerminal({ workspaceId: ws.id, sessionId: session.id })}>
+                <SquareTerminal size={13} className="text-fg-muted" /> New terminal here
+              </MenuItem>
+              <MenuItem onSelect={() => void renameSession(ws.id, session.id)}>
+                <Pencil size={13} className="text-fg-muted" /> Rename session
+              </MenuItem>
+              <MenuSeparator />
+              <MenuItem danger onSelect={() => void deleteSession(ws.id, session.id)}>
+                <Trash2 size={13} /> Delete session
+              </MenuItem>
+            </>
+          }
+        >
+          <div className={cn('group flex h-7 items-center rounded-md pl-4 pr-1 text-xs', active ? 'text-fg' : 'text-fg-muted hover:bg-hover/60 hover:text-fg')}>
+            <button onClick={() => showSession(session.id)} className="flex min-w-0 flex-1 items-center gap-2 text-left" data-testid="session-name">
+              <Layers size={12} className={cn('shrink-0', active ? 'text-accent-strong' : 'text-fg-faint')} />
+              <span className={cn('truncate', active && 'font-semibold')}>{session.name}</span>
+              <span className="tabular text-2xs text-fg-faint">{panes.length + hidden.length}</span>
             </button>
-          </Tip>
+            <Tip label="New terminal in this session">
+              <button
+                aria-label={`New terminal in ${session.name}`}
+                onClick={() => void openTerminal({ workspaceId: ws.id, sessionId: session.id })}
+                className="rounded p-1 text-fg-faint opacity-0 hover:bg-hover hover:text-fg focus:opacity-100 group-hover:opacity-100"
+              >
+                <Plus size={12} />
+              </button>
+            </Tip>
+          </div>
+        </ContextMenu>
+      )}
+      {panes.length + hidden.length === 0 ? (
+        <div className="py-1 pl-9 text-2xs text-fg-faint">{over ? 'Drop to move here' : 'Empty'}</div>
+      ) : (
+        <ul className="flex flex-col gap-px pb-0.5">
+          {panes.map((p) => (
+            <PaneRow key={p.id} sessionId={session.id} pane={p} now={now} offScreen={false} />
+          ))}
+          {hidden.map((h) => (
+            <PaneRow key={h.id} sessionId={session.id} pane={{ id: h.id, title: h.title, kind: h.params.kind, ptyId: h.params.ptyId, agentId: h.params.agentId }} now={now} offScreen />
+          ))}
+        </ul>
+      )}
+    </li>
+  )
+}
+
+function ProjectRow({ ws, active, now, onEdit }: { ws: Workspace; active: boolean; now: number; onEdit: () => void }) {
+  const [open, setOpen] = useState(true)
+  const sessions = sessionsOf(ws)
+  const menu = (
+    <>
+      <MenuItem onSelect={() => void newSession(ws.id)}>
+        <Layers size={13} className="text-fg-muted" /> New session
+      </MenuItem>
+      <MenuItem onSelect={() => void renameProject(ws.id)}>
+        <Pencil size={13} className="text-fg-muted" /> Rename project
+      </MenuItem>
+      <MenuItem onSelect={onEdit}>
+        <UserRound size={13} className="text-fg-muted" /> Accounts for this project
+      </MenuItem>
+      <MenuItem onSelect={() => void window.api.workspaces.reveal(ws.id)}>
+        <FolderOpen size={13} className="text-fg-muted" /> Open folder
+      </MenuItem>
+      <MenuSeparator />
+      <MenuItem danger onSelect={() => void removeProject(ws.id)}>
+        <Trash2 size={13} /> Remove project
+      </MenuItem>
+    </>
+  )
+  return (
+    <li className="pb-1">
+      <ContextMenu menu={menu}>
+        <div className={cn('group flex items-center rounded-lg py-1 pl-2 pr-1 transition-colors', active ? 'bg-raised' : 'hover:bg-hover/60')}>
+          <button aria-label={open ? 'Collapse' : 'Expand'} onClick={() => setOpen(!open)} className="flex h-6 w-5 shrink-0 items-center justify-center text-fg-faint hover:text-fg">
+            <ChevronDown size={13} className={cn('transition-transform', !open && '-rotate-90')} />
+          </button>
+          <button onClick={() => showSession(activeSessionId(ws.id))} className="min-w-0 flex-1 text-left" title={ws.path} data-testid="workspace-row">
+            <div className={cn('truncate text-[13px] leading-tight', active ? 'font-semibold text-fg' : 'font-medium text-fg-muted')}>{ws.name}</div>
+            <div className="truncate font-mono text-[10.5px] leading-tight text-fg-faint [direction:rtl]">
+              <bdi>{ws.path}</bdi>
+            </div>
+          </button>
+          <Menu>
+            <MenuTrigger asChild>
+              <button aria-label={`${ws.name} options`} className="rounded p-1 text-fg-faint opacity-0 hover:bg-hover hover:text-fg focus:opacity-100 group-hover:opacity-100 data-[state=open]:opacity-100">
+                <MoreHorizontal size={14} />
+              </button>
+            </MenuTrigger>
+            <MenuContent>{menu}</MenuContent>
+          </Menu>
         </div>
       </ContextMenu>
-      {open &&
-        (panes.length ? (
-          <ul className="flex flex-col gap-px">
-            {panes.map((p) => (
-              <PaneRow key={p.id} workspaceId={workspaceId} p={p} now={now} indent />
-            ))}
-          </ul>
-        ) : (
-          <div className="py-1 pl-11 text-2xs text-fg-faint">Empty — right-click a terminal › Move to project</div>
-        ))}
-    </li>
-  )
-}
-
-function PaneRows({ workspaceId, now }: { workspaceId: string; now: number }) {
-  const panels = useApp((s) => s.panels[workspaceId] ?? NO_PANELS)
-  const projects = useApp((s) => s.snapshot!.workspaces.find((w) => w.id === workspaceId)?.projects ?? NO_PROJECTS)
-  const known = new Set(projects.map((p) => p.id))
-  const loose = panels.filter((p) => !p.projectId || !known.has(p.projectId))
-  if (panels.length === 0 && projects.length === 0) return <div className="py-1 pl-7 text-xs text-fg-faint">No panes yet</div>
-  return (
-    <ul className="flex flex-col gap-px py-0.5">
-      {projects.map((project) => (
-        <ProjectSection key={project.id} workspaceId={workspaceId} project={project} panes={panels.filter((p) => p.projectId === project.id)} now={now} />
-      ))}
-      {loose.map((p) => (
-        <PaneRow key={p.id} workspaceId={workspaceId} p={p} now={now} indent={false} />
-      ))}
-    </ul>
-  )
-}
-function WorkspaceRow({ ws, active, now, onEdit }: { ws: Workspace; active: boolean; now: number; onEdit: (mode: 'rename' | 'accounts') => void }) {
-  const [open, setOpen] = useState(true)
-  const panes = useApp((s) => s.panels[ws.id]?.length ?? 0)
-  return (
-    <li>
-      <div className={cn('group flex h-8 items-center rounded-lg pl-2.5 pr-1 transition-colors', active ? 'bg-raised' : 'hover:bg-hover/60')}>
-        <button onClick={() => setActiveWorkspace(ws.id)} className="flex min-w-0 flex-1 items-center gap-2 text-left" title={ws.path} data-testid="workspace-row">
-          {(ws.name === 'Home' || ws.name === 'Scratchpad') && <Zap size={12} className="shrink-0 text-warn" />}
-          <span className={cn('truncate text-[13px]', active ? 'font-semibold text-fg' : 'text-fg-muted')}>{ws.name}</span>
-        </button>
-        <Menu>
-          <MenuTrigger asChild>
-            <button aria-label={`${ws.name} options`} className="rounded p-1 text-fg-faint opacity-0 hover:bg-hover hover:text-fg focus:opacity-100 group-hover:opacity-100 data-[state=open]:opacity-100">
-              <MoreHorizontal size={14} />
+      {open && (
+        <ul className="mt-0.5 flex flex-col gap-0.5">
+          {sessions.map((s) => (
+            <SessionBlock key={s.id} ws={ws} session={s} now={now} showHeader={sessions.length > 1} />
+          ))}
+          <li>
+            <button onClick={() => void newSession(ws.id)} className="flex h-7 w-full items-center gap-2 rounded-md pl-4 text-xs text-fg-faint transition-colors hover:bg-hover/60 hover:text-fg" data-testid="rail-new-session">
+              <Plus size={12} /> New session
             </button>
-          </MenuTrigger>
-          <MenuContent>
-            <MenuItem onSelect={() => void createProject(ws.id)}>
-              <FolderPlus size={13} className="text-fg-muted" /> New project…
-            </MenuItem>
-            <MenuSeparator />
-            <MenuItem onSelect={() => onEdit('rename')}>
-              <Pencil size={13} className="text-fg-muted" /> Rename
-            </MenuItem>
-            <MenuItem onSelect={() => onEdit('accounts')}>
-              <UserRound size={13} className="text-fg-muted" /> Accounts for this workspace
-            </MenuItem>
-            <MenuItem onSelect={() => void window.api.workspaces.reveal(ws.id)}>
-              <FolderOpen size={13} className="text-fg-muted" /> Open folder
-            </MenuItem>
-            <MenuSeparator />
-            <MenuItem
-              danger
-              onSelect={() =>
-                void askConfirm({
-                  title: `Remove “${ws.name}” from AgentDeck?`,
-                  body: (
-                    <>
-                      Its panes and projects close. <span className="text-fg">Your files stay where they are</span> — you can add the folder again any time.
-                    </>
-                  ),
-                  confirmLabel: 'Remove workspace'
-                }).then((ok) => {
-                  if (ok) void window.api.workspaces.remove(ws.id)
-                })
-              }
-            >
-              <Trash2 size={13} /> Remove from AgentDeck
-            </MenuItem>
-          </MenuContent>
-        </Menu>
-        <button aria-label={open ? 'Collapse' : 'Expand'} onClick={() => setOpen(!open)} className="flex h-7 w-6 items-center justify-center text-fg-faint hover:text-fg">
-          <ChevronDown size={13} className={cn('transition-transform', !open && '-rotate-90')} />
-        </button>
-        {panes > 0 && <span className="tabular min-w-[20px] rounded-md bg-hover px-1.5 text-center text-2xs font-medium leading-5 text-fg-muted">{panes}</span>}
-      </div>
-      {open && <PaneRows workspaceId={ws.id} now={now} />}
+          </li>
+        </ul>
+      )}
     </li>
   )
 }
@@ -210,46 +236,28 @@ function RailFooter() {
 export function CodeRail() {
   const workspaces = useApp((s) => s.snapshot!.workspaces)
   const activeId = useApp((s) => s.snapshot!.ui.activeWorkspaceId)
-  const [editing, setEditing] = useState<{ id: string; mode: 'rename' | 'accounts' } | null>(null)
+  const [editing, setEditing] = useState<string | null>(null)
   const now = useActivityClock()
   return (
-    <nav aria-label="Workspaces" className="flex h-full flex-col">
+    <nav aria-label="Projects" className="flex h-full flex-col">
       <SectionLabel
         action={
-          <Menu>
-            <MenuTrigger asChild>
-              <button aria-label="Add a workspace" data-testid="add-workspace" className="flex h-6 w-6 items-center justify-center rounded-md text-fg-faint hover:bg-hover hover:text-fg">
-                <Plus size={14} />
-              </button>
-            </MenuTrigger>
-            <MenuContent align="end">
-              <MenuItem onSelect={() => void addWorkspace()} hint="Ctrl+O">
-                <FolderOpen size={13} className="text-fg-muted" /> Open a folder…
-              </MenuItem>
-              <MenuItem onSelect={() => void continueWithoutFolder()}>
-                <Zap size={13} className="text-warn" /> Continue without a folder
-              </MenuItem>
-              {activeId && (
-                <>
-                  <MenuSeparator />
-                  <MenuItem onSelect={() => void createProject(activeId)}>
-                    <FolderPlus size={13} className="text-fg-muted" /> New project…
-                  </MenuItem>
-                </>
-              )}
-            </MenuContent>
-          </Menu>
+          <Tip label="New project">
+            <button aria-label="New project" data-testid="add-workspace" onClick={openNewProject} className="flex h-6 w-6 items-center justify-center rounded-md text-fg-faint hover:bg-hover hover:text-fg">
+              <FolderPlus size={14} />
+            </button>
+          </Tip>
         }
       >
-        Workspaces
+        Projects
       </SectionLabel>
-      <ul className="flex flex-1 flex-col gap-0.5 overflow-y-auto px-2 pb-3">
+      <ul className="flex flex-1 flex-col overflow-y-auto px-2 pb-3">
         {workspaces.map((ws) => (
-          <WorkspaceRow key={ws.id} ws={ws} active={ws.id === activeId} now={now} onEdit={(mode) => setEditing({ id: ws.id, mode })} />
+          <ProjectRow key={ws.id} ws={ws} active={ws.id === activeId} now={now} onEdit={() => setEditing(ws.id)} />
         ))}
       </ul>
       <RailFooter />
-      {editing && <WorkspaceDialog workspaceId={editing.id} mode={editing.mode} onClose={() => setEditing(null)} />}
+      {editing && <WorkspaceDialog workspaceId={editing} mode="accounts" onClose={() => setEditing(null)} />}
     </nav>
   )
 }
