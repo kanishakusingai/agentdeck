@@ -8,3 +8,4 @@ e2e/screenshots
 .DS_Store
 .eslintcache
 *.log*
+graphify-out/

@@ -88,11 +88,19 @@ select,
   background: transparent;
 }
 
-:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 1px;
+/* In the base layer so components can turn it off (unlayered CSS beats every
+   Tailwind utility, which drew a second box inside focused text fields). */
+@layer base {
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 1px;
+  }
+  /* Text fields show focus with their own border and glow. */
+  input:focus-visible,
+  textarea:focus-visible {
+    outline: none;
+  }
 }
-
 .drag {
   -webkit-app-region: drag;
 }
@@ -164,7 +172,14 @@ select,
 .dockview-theme-agentdeck .dv-content-container {
   background: var(--color-panel);
 }
-.dockview-theme-agentdeck .dv-tab {
+/* Always-rendered panes (terminals, browsers) are drawn in an overlay on top of
+   their card, outside its rounded clip: round the overlay too so it doesn't
+   paint over the card's bottom corners and border. */
+.dockview-theme-agentdeck .dv-render-overlay {
+  border-bottom-left-radius: 11px;
+  border-bottom-right-radius: 11px;
+  overflow: hidden;
+}.dockview-theme-agentdeck .dv-tab {
   padding: 0 4px 0 8px;
 }
 /* Several panes stacked as tabs in one card: show which one is in front. */

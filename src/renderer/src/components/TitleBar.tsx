@@ -1,5 +1,4 @@
-import { Loader2, Maximize2, Mic, Minimize2, Minus, PanelLeft, PanelRight, Settings2, X } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { Loader2, Mic, PanelLeft, PanelRight, Settings2 } from 'lucide-react'
 import type { Mode } from '@shared/types'
 import { cn } from '../lib/cn'
 import { setMode, toggleRail, toggleSidebar, useApp } from '../lib/store'
@@ -28,38 +27,6 @@ function ModeSwitch({ mode }: { mode: Mode }) {
             )}
           >
             {m.label}
-          </button>
-        </Tip>
-      ))}
-    </div>
-  )
-}
-
-/** Close / minimise / maximise, drawn by the app (Windows and Linux). */
-function WindowControls() {
-  const [maximized, setMaximized] = useState(false)
-  useEffect(() => {
-    void window.api.window.isMaximized().then(setMaximized)
-    return window.api.window.onMaximized(setMaximized)
-  }, [])
-  const buttons = [
-    { label: 'Close window', color: 'bg-[#ff5f57]', icon: X, run: () => void window.api.window.close() },
-    { label: 'Minimize window', color: 'bg-[#febc2e]', icon: Minus, run: () => void window.api.window.minimize() },
-    {
-      label: maximized ? 'Restore window' : 'Maximize window',
-      color: 'bg-[#28c840]',
-      icon: maximized ? Minimize2 : Maximize2,
-      run: () => void window.api.window.toggleMaximize()
-    }
-  ]
-  return (
-    <div className="no-drag group flex items-center" data-testid="window-controls">
-      {buttons.map((b) => (
-        <Tip key={b.label} label={b.label}>
-          <button aria-label={b.label} onClick={b.run} className="no-drag flex h-7 w-[22px] items-center justify-center">
-            <span className={cn('flex h-3 w-3 items-center justify-center rounded-full shadow-[inset_0_0_0_0.5px_rgba(0,0,0,0.35)]', b.color)}>
-              <b.icon size={8} strokeWidth={3} className="text-black/60 opacity-0 transition-opacity group-hover:opacity-100" />
-            </span>
           </button>
         </Tip>
       ))}
@@ -109,9 +76,12 @@ export function TitleBar() {
     // Three-column grid keeps the mode switch centred without CSS transforms:
     // Electron computes the title bar's clickable (no-drag) areas without transforms,
     // so a translated switch would sit in the wrong place and swallow clicks.
-    <header className="drag grid h-11 shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-3 pr-2" style={{ paddingLeft: isMac ? 84 : 10 }}>
+    // Windows draws its own minimise / maximise / close buttons over the right edge (titleBarOverlay).
+    <header
+      className="drag grid h-11 shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-3"
+      style={{ paddingLeft: isMac ? 84 : 12, paddingRight: isMac ? 8 : 150 }}
+    >
       <div className="flex min-w-0 items-center gap-3">
-        {!isMac && <WindowControls />}
         <div className="flex min-w-0 items-center gap-2">
           <Logo />
           <span className="text-[13px] font-semibold tracking-tight text-fg">AgentDeck</span>

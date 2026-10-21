@@ -9,6 +9,7 @@ mkdirSync(shots, { recursive: true })
 
 const userData = mkdtempSync(join(tmpdir(), 'agentdeck-e2e-data-'))
 const workspaceDir = mkdtempSync(join(tmpdir(), 'agentdeck-e2e-site-'))
+writeFileSync(join(workspaceDir, 'notes.md'), '# notes\n')
 // A fake "claude" first on PATH that immediately reports a usage limit.
 const fakeBin = mkdtempSync(join(tmpdir(), 'agentdeck-e2e-bin-'))
 writeFileSync(join(fakeBin, 'claude.cmd'), '@echo off\r\necho Claude usage limit reached. Your limit will reset at 3pm.\r\n')
@@ -56,11 +57,45 @@ test('the whole app: workspaces, terminals, layout, modes, persistence', async (
   await page.keyboard.press('Enter')
   await expect(page.locator('.xterm-rows').first()).toContainText('agentdeck-23', { timeout: 15000 })
 
-  // 4. Split into more panes, then Tidy
+  // 3b. Every pane has its own message box: Enter sends it to that terminal
+  const box = page.getByTestId('pane-composer').first().locator('textarea')
+  await box.click()
+  await box.fill('echo composer-$(40+2)')
+  await box.press('Enter')
+  await expect(page.locator('.xterm-rows').first()).toContainText('composer-42', { timeout: 15000 })
+  await expect(box).toHaveValue('')
+  // "@" lists the workspace's files
+  await box.pressSequentially('look at @not')
+  await expect(page.getByRole('listbox', { name: 'Files' })).toBeVisible()
+  await expect(page.getByRole('option', { name: /notes\.md/ })).toBeVisible()
+  await shot(page, '03a-file-picker')
+  await box.press('Enter')
+  await expect(box).toHaveValue('look at @notes.md ')
+  await box.fill('')
+
+  // 4. New panes keep every tile the same size (no Tidy needed)
   await page.getByTestId('new-terminal').click()
   await page.getByTestId('new-terminal').click()
   await page.getByTestId('new-terminal').click()
   await expect(page.getByTestId('pane-tab')).toHaveCount(4)
+  await page.waitForTimeout(500)
+  const sizes = await page.locator('.dv-groupview').evaluateAll((els) => els.map((e) => [Math.round(e.getBoundingClientRect().width), Math.round(e.getBoundingClientRect().height)]))
+  expect(sizes).toHaveLength(4)
+  for (const [w, h] of sizes) {
+    expect(Math.abs(w - sizes[0][0])).toBeLessThanOrEqual(2)
+    expect(Math.abs(h - sizes[0][1])).toBeLessThanOrEqual(2)
+  }
+  await shot(page, '03b-even-tiles')
+
+  // 4b. Full screen: one pane over the whole window, then back
+  await page.getByTestId('zoom-pane').first().click()
+  await expect(page.getByTestId('rail-code')).toBeHidden()
+  await expect(page.getByTestId('new-terminal')).toBeHidden()
+  await shot(page, '03c-full-screen')
+  await page.keyboard.press('F11')
+  await expect(page.getByTestId('rail-code')).toBeVisible()
+  await expect(page.getByTestId('pane-tab')).toHaveCount(4)
+
   await page.getByTestId('tidy').click()
   await expect(page.getByTestId('pane-tab')).toHaveCount(4)
   // Tidy keeps processes alive: the first terminal still shows its output
@@ -87,6 +122,16 @@ test('the whole app: workspaces, terminals, layout, modes, persistence', async (
   await expect(page.getByRole('button', { name: /Continue on another account/ })).toBeVisible()
   await expect(page.getByTestId('stat-needs')).toContainText('1')
   await shot(page, '04b-usage-limit')
+  // An agent pane's box lists the agent's slash commands
+  const claudeBox = page.getByRole('textbox', { name: 'Message to Claude' })
+  await claudeBox.click()
+  await claudeBox.pressSequentially('/comp')
+  await expect(page.getByRole('listbox', { name: 'Commands' })).toBeVisible()
+  await expect(page.getByRole('option', { name: /\/compact/ })).toBeVisible()
+  await shot(page, '04c-slash-commands')
+  await claudeBox.press('Escape')
+  await expect(page.getByRole('listbox', { name: 'Commands' })).toBeHidden()
+  await claudeBox.fill('')
   await page.getByRole('button', { name: 'Dismiss' }).click()
   await expect(page.getByText('Usage limit reached.', { exact: true })).toBeHidden()
   await page.getByRole('button', { name: /^Close Claude Code/ }).click()

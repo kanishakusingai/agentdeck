@@ -76,24 +76,27 @@ realClick((bounds.x + sidebar.x + sidebar.width / 2) * scale, (bounds.y + sideba
 await page.waitForTimeout(700)
 console.log(`real click on "Sidebar": ${(await sidebarBtn.getAttribute('aria-label')) !== before ? 'WORKS' : 'IGNORED'}`)
 
-// The window buttons drawn in the title bar.
+// Windows' own caption buttons (titleBarOverlay), right to left: close, maximise, minimise — 46 px each.
 const winState = () => app.evaluate(({ BrowserWindow }) => {
   const w = BrowserWindow.getAllWindows()[0]
   return { max: w.isMaximized(), min: w.isMinimized() }
 })
-async function clickButton(name) {
-  const box = await page.getByRole('button', { name }).boundingBox()
-  realClick((bounds.x + box.x + box.width / 2) * scale, (bounds.y + box.y + box.height / 2) * scale)
-  await page.waitForTimeout(900)
+const contentBounds = () => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].getContentBounds())
+async function clickCaption(slot) {
+  const b = await contentBounds()
+  realClick((b.x + b.width - 46 * slot - 23) * scale, (b.y + 22) * scale)
+  await page.waitForTimeout(1000)
 }
-await clickButton('Maximize window')
-console.log(`real click on "Maximize": ${(await winState()).max ? 'WORKS' : 'IGNORED'}`)
-// Maximising moves the window: re-measure before the next click.
-Object.assign(bounds, await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].getContentBounds()))
-await clickButton('Restore window')
-console.log(`real click on "Restore": ${!(await winState()).max ? 'WORKS' : 'IGNORED'}`)
-Object.assign(bounds, await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].getContentBounds()))
-await clickButton('Minimize window')
-console.log(`real click on "Minimize": ${(await winState()).min ? 'WORKS' : 'IGNORED'}`)
-await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].restore())
+await clickCaption(2)
+console.log(`real click on native "Minimize": ${(await winState()).min ? 'WORKS' : 'IGNORED'}`)
+await app.evaluate(({ BrowserWindow }) => {
+  const w = BrowserWindow.getAllWindows()[0]
+  w.restore()
+  w.focus()
+})
+await page.waitForTimeout(1500)
+await clickCaption(1)
+console.log(`real click on native "Maximize": ${(await winState()).max ? 'WORKS' : 'IGNORED'}`)
+await clickCaption(1)
+console.log(`real click on native "Restore": ${!(await winState()).max ? 'WORKS' : 'IGNORED'}`)
 await app.close()

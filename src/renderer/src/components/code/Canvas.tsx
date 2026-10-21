@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { agentById } from '@shared/agents'
 import { accountName } from '../../lib/accounts'
 import { tracker, useActivityClock } from '../../lib/activity'
-import { arrange, openBrowserPane, openTerminal, openThreadPane, registerCanvas, restoreLayout, type PanelParams } from '../../lib/canvas'
+import { arrange, openBrowserPane, openTerminal, openThreadPane, registerCanvas, restoreLayout, toggleZoom, type PanelParams } from '../../lib/canvas'
 import { cn } from '../../lib/cn'
 import { toast, useApp } from '../../lib/store'
 import { ThreadView } from '../thread/ThreadView'
@@ -78,7 +78,10 @@ function GroupActions(props: IDockviewHeaderActionsProps) {
     const sub = props.containerApi.onDidMaximizedGroupChange(() => setMaximized(props.api.isMaximized()))
     return () => sub.dispose()
   }, [props.api, props.containerApi])
+  const zoomedHere = useApp((s) => Boolean(params) && s.zoomed === params!.workspaceId)
   if (!params) return null
+  // Full screen = this pane over the whole window (with one pane there is nothing to maximise).
+  const fullScreen = zoomedHere && (maximized || props.containerApi.groups.length === 1)
   const split = (direction: 'right' | 'below'): void =>
     void openTerminal({ workspaceId: params.workspaceId, direction, referencePanel: props.activePanel!.id })
   const readThread = async (): Promise<void> => {
@@ -101,11 +104,12 @@ function GroupActions(props: IDockviewHeaderActionsProps) {
         <Rows2 size={13} />
       </IconButton>
       <IconButton
-        label={maximized ? 'Restore pane size' : 'Make this pane fill the canvas'}
-        onClick={() => (maximized ? props.api.exitMaximized() : props.api.maximize())}
-        className={btn}
+        label={fullScreen ? 'Exit full screen · F11' : 'Full screen · F11'}
+        onClick={() => toggleZoom(params.workspaceId, fullScreen ? undefined : props.activePanel!.id)}
+        className={cn(btn, fullScreen && 'text-accent-strong')}
+        data-testid="zoom-pane"
       >
-        {maximized ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
+        {fullScreen ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
       </IconButton>
     </div>
   )

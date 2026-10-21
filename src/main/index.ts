@@ -43,10 +43,12 @@ function createWindow(): void {
     backgroundColor: BG,
     title: 'AgentDeck',
     icon: join(__dirname, '../../resources/icon.png'),
-    // The app draws its own window buttons (close / minimise / maximise) in the title bar.
-    // macOS keeps its native traffic lights.
+    // The app draws its own title bar; the system keeps its own window buttons
+    // (Windows: minimise / maximise / close on the right, macOS: traffic lights).
     titleBarStyle: 'hidden',
-    ...(process.platform === 'darwin' ? { trafficLightPosition: { x: 16, y: 16 } } : {}),
+    ...(process.platform === 'darwin'
+      ? { trafficLightPosition: { x: 16, y: 16 } }
+      : { titleBarOverlay: { color: BG, symbolColor: '#a1a1aa', height: 44 } }),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
@@ -58,8 +60,6 @@ function createWindow(): void {
   })
 
   mainWindow.on('ready-to-show', () => mainWindow?.show())
-  mainWindow.on('maximize', () => send('window:maximized', true))
-  mainWindow.on('unmaximize', () => send('window:maximized', false))
   hardenWebContents(mainWindow.webContents)
 
   // The app itself never navigates away from its own page.
@@ -186,14 +186,8 @@ function registerIpc(): void {
 
   handle('voice:enhance', (text) => core.enhancePrompt(String(text ?? '')))
 
-  handle('window:minimize', () => mainWindow?.minimize())
-  handle('window:toggleMaximize', () => {
-    if (!mainWindow) return
-    if (mainWindow.isMaximized()) mainWindow.unmaximize()
-    else mainWindow.maximize()
-  })
-  handle('window:close', () => mainWindow?.close())
-  handle('window:isMaximized', () => mainWindow?.isMaximized() ?? false)
+  handle('composer:commands', (workspaceId, agentId) => core.customCommands(workspaceId, agentId))
+  handle('composer:files', (workspaceId) => core.workspaceFiles(workspaceId))
 }
 
 if (!app.requestSingleInstanceLock()) {

@@ -13,6 +13,7 @@ import type {
   UiState,
   UsageLimitEvent
 } from './types'
+import type { SlashCommand } from './composer'
 
 /** What the renderer sees of the app's saved data (big collections load separately). */
 export type AppSnapshot = Omit<AppData, 'runs' | 'layouts'>
@@ -67,10 +68,10 @@ export interface InvokeChannels {
   'limits:resumeLater': (ptyId: string) => void
   'limits:dismiss': (ptyId: string) => void
   'voice:enhance': (text: string) => string
-  'window:minimize': () => void
-  'window:toggleMaximize': () => void
-  'window:close': () => void
-  'window:isMaximized': () => boolean
+  /** The user's own slash commands and skills for an agent in this workspace. */
+  'composer:commands': (workspaceId: string, agentId?: string) => SlashCommand[]
+  /** Files and folders of a workspace for the @ picker (folders end with "/"). */
+  'composer:files': (workspaceId: string) => string[]
 }
 
 /** Fire-and-forget channels (renderer → main). */
@@ -86,7 +87,6 @@ export interface EventChannels {
   'pty:info': (list: PtyInfo[]) => void
   'pty:limit': (event: UsageLimitEvent) => void
   'routines:runs': (runs: RunSummary[]) => void
-  'window:maximized': (maximized: boolean) => void
 }
 
 type Invoke<C extends keyof InvokeChannels> = (...args: Parameters<InvokeChannels[C]>) => Promise<ReturnType<InvokeChannels[C]>>
@@ -156,11 +156,8 @@ export interface AgentDeckApi {
   voice: {
     enhance: Invoke<'voice:enhance'>
   }
-  window: {
-    minimize: Invoke<'window:minimize'>
-    toggleMaximize: Invoke<'window:toggleMaximize'>
-    close: Invoke<'window:close'>
-    isMaximized: Invoke<'window:isMaximized'>
-    onMaximized: On<'window:maximized'>
+  composer: {
+    commands: Invoke<'composer:commands'>
+    files: Invoke<'composer:files'>
   }
 }

@@ -1,6 +1,6 @@
-import type { DockviewApi, IDockviewPanel } from 'dockview-react'
+import type { AddPanelPositionOptions, DockviewApi, IDockviewPanel } from 'dockview-react'
 import type { PtyCreateOptions, PtyInfo } from '@shared/types'
-import { buildGridLayout, type PanelState } from './layout'
+import { buildGridLayout, isEvenGrid, planAdd, type GridShape, type PanelState } from './layout'
 import { errorText, setActiveWorkspace, setMode, toast, useApp, type PanelKind, type PanelSummary } from './store'
 
 /** Params stored on every panel (persisted with the layout). */
@@ -34,11 +34,17 @@ function publish(workspaceId: string): void {
   useApp.setState((s) => ({ panels: { ...s.panels, [workspaceId]: summarise(api) } }))
 }
 
+const gridOf = (api: DockviewApi): GridShape | undefined =>
+  api.groups.length ? (api.toJSON().grid as unknown as GridShape) : undefined
+
 export function registerCanvas(workspaceId: string, api: DockviewApi): () => void {
   canvases.set(workspaceId, api)
   let saveTimer: ReturnType<typeof setTimeout> | undefined
+  /** Whether the tiles were an even grid before the latest change (closing a pane keeps it even). */
+  let even = isEvenGridOf(api)
   const saveNow = (): void => {
     clearTimeout(saveTimer)
+    even = isEvenGridOf(api)
     void window.api.app.setLayout(workspaceId, api.toJSON())
   }
   const subs = [
@@ -58,7 +64,16 @@ export function registerCanvas(workspaceId: string, api: DockviewApi): () => voi
       const params = paramsOf(panel)
       if (rearranging) return
       if (params.kind === 'terminal' && params.ptyId) void window.api.pty.dispose(params.ptyId)
-      saveNow()
+      // Closing a tile of an even grid re-tiles the rest so they stay the same size.
+      const wasEven = even
+      setTimeout(() => {
+        if (wasEven && api.panels.length > 0 && !isEvenGridOf(api)) arrange(workspaceId)
+        else saveNow()
+      }, 0)
+    }),
+    api.onDidMaximizedGroupChange(() => {
+      // Dockview leaves the maximised view by itself when a pane is added: leave full screen too.
+      if (!api.hasMaximizedGroup() && api.groups.length > 1 && useApp.getState().zoomed === workspaceId) useApp.setState({ zoomed: null })
     }),
     api.onDidActivePanelChange(({ panel }) => {
       if (panel) useApp.setState({ activePanel: { workspaceId, panelId: panel.id } })
@@ -88,7 +103,37 @@ export function canvasFor(workspaceId: string): DockviewApi | undefined {
   return canvases.get(workspaceId)
 }
 
+function isEvenGridOf(api: DockviewApi): boolean {
+  const grid = gridOf(api)
+  return !grid || isEvenGrid(grid)
+}
+
 type Direction = 'right' | 'below' | 'within'
+
+/** A new pane should be seen: leave full screen first. */
+function leaveFullScreen(api: DockviewApi): void {
+  if (api.hasMaximizedGroup()) api.exitMaximizedGroup()
+  if (useApp.getState().zoomed) useApp.setState({ zoomed: null })
+}
+
+/**
+ * Where a new pane goes so all tiles stay the same size. `retile` = add it
+ * anywhere, then re-arrange everything into an even grid.
+ */
+function evenPlacement(api: DockviewApi): { position?: AddPanelPositionOptions; retile: boolean } {
+  leaveFullScreen(api)
+  const plan = planAdd(gridOf(api))
+  switch (plan.kind) {
+    case 'first':
+      return { retile: false }
+    case 'right':
+      return { position: { referenceGroup: plan.groupId, direction: 'right' }, retile: false }
+    case 'below':
+      return { position: { direction: 'below' }, retile: false }
+    case 'retile':
+      return { position: api.activePanel ? { referencePanel: api.activePanel.id, direction: 'right' } : undefined, retile: true }
+  }
+}
 
 /** Pick a sensible spot: split the active pane along its longer side. */
 function placement(api: DockviewApi, direction?: Direction, referencePanel?: string) {
@@ -117,7 +162,15 @@ export async function openTerminal(opts: OpenTerminalOptions): Promise<PtyInfo |
   }
   rememberPty(info)
   const api = await whenCanvas(opts.workspaceId)
-  addTerminalPanel(api, info, placement(api, direction, referencePanel))
+  // An explicit split ("Split right / down") goes exactly there; anything else keeps the tiles even.
+  if (direction || referencePanel) {
+    leaveFullScreen(api)
+    addTerminalPanel(api, info, placement(api, direction, referencePanel))
+  } else {
+    const { position, retile } = evenPlacement(api)
+    addTerminalPanel(api, info, position)
+    if (retile) arrange(opts.workspaceId)
+  }
   return info
 }
 
@@ -126,7 +179,7 @@ function terminalParams(info: PtyInfo): PanelParams {
   return { kind: 'terminal', workspaceId: info.workspaceId, ptyId: info.id, agentId: info.agentId, accountId: info.accountId }
 }
 
-function addTerminalPanel(api: DockviewApi, info: PtyInfo, position: ReturnType<typeof placement>): void {
+function addTerminalPanel(api: DockviewApi, info: PtyInfo, position: AddPanelPositionOptions | undefined): void {
   api.addPanel({
     id: `term-${info.id}`,
     component: 'terminal',
@@ -151,14 +204,16 @@ export async function openBrowserPane(workspaceId: string, url: string): Promise
   setActiveWorkspace(workspaceId)
   const api = await whenCanvas(workspaceId)
   const params: PanelParams = { kind: 'browser', workspaceId, url }
+  const { position, retile } = evenPlacement(api)
   api.addPanel({
     id: `browser-${crypto.randomUUID()}`,
     component: 'browser',
     title: 'Browser',
     params: params as unknown as Record<string, unknown>,
     renderer: 'always',
-    position: placement(api)
+    position
   })
+  if (retile) arrange(workspaceId)
 }
 
 export async function openThreadPane(workspaceId: string, threadId: string, title: string): Promise<void> {
@@ -228,6 +283,8 @@ export function arrange(workspaceId: string, tiles?: number): void {
   } finally {
     rearranging--
   }
+  // Save right away: the app may be closed before the debounced save runs.
+  void window.api.app.setLayout(workspaceId, api.toJSON())
 }
 
 export async function restoreLayout(workspaceId: string, api: DockviewApi, layout: unknown): Promise<void> {
@@ -241,6 +298,24 @@ export async function restoreLayout(workspaceId: string, api: DockviewApi, layou
     rearranging--
   }
   publish(workspaceId)
+}
+
+/** Show the active (or given) pane over the whole window, or go back to the normal view. */
+export function toggleZoom(workspaceId: string, panelId?: string): void {
+  const api = canvases.get(workspaceId)
+  if (!api) return
+  if (useApp.getState().zoomed === workspaceId) {
+    if (api.hasMaximizedGroup()) api.exitMaximizedGroup()
+    useApp.setState({ zoomed: null })
+    return
+  }
+  const panel = panelId ? api.getPanel(panelId) : api.activePanel
+  if (!panel) return
+  setMode('code')
+  setActiveWorkspace(workspaceId)
+  if (api.groups.length > 1) api.maximizeGroup(panel)
+  panel.api.setActive()
+  useApp.setState({ zoomed: workspaceId })
 }
 
 export function activeTerminalPtyId(): string | undefined {

@@ -81,12 +81,9 @@ const api = {
   voice: {
     enhance: call('voice:enhance')
   },
-  window: {
-    minimize: call('window:minimize'),
-    toggleMaximize: call('window:toggleMaximize'),
-    close: call('window:close'),
-    isMaximized: call('window:isMaximized'),
-    onMaximized: on('window:maximized')
+  composer: {
+    commands: call('composer:commands'),
+    files: call('composer:files')
   }
 } satisfies AgentDeckApi
 

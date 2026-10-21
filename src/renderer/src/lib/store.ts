@@ -28,6 +28,8 @@ interface State {
   runs: RunSummary[]
   panels: Record<string, PanelSummary[]>
   activePanel: { workspaceId: string; panelId: string } | null
+  /** Workspace whose maximised pane fills the whole window (rails and toolbar hidden). */
+  zoomed: string | null
   settingsOpen: SettingsSection | null
   selectedThreadId: string | null
   selectedRoutineId: string | null
@@ -46,6 +48,7 @@ export const useApp = create<State>(() => ({
   runs: [],
   panels: {},
   activePanel: null,
+  zoomed: null,
   settingsOpen: null,
   selectedThreadId: null,
   selectedRoutineId: null,

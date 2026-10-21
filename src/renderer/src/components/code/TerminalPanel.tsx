@@ -7,6 +7,7 @@ import { setPanelPty, type PanelParams } from '../../lib/canvas'
 import { subscribePty, writePty } from '../../lib/pty-bus'
 import { errorText, toast, useApp } from '../../lib/store'
 import { LimitBanner } from './LimitBanner'
+import { PaneComposer, type PaneComposerHandle } from './PaneComposer'
 
 export const TERMINAL_THEME: ITheme = {
   background: '#0e0e11',
@@ -41,6 +42,15 @@ export function TerminalPanel(props: IDockviewPanelProps) {
   const termRef = useRef<Terminal | null>(null)
   const fitRef = useRef<FitAddon | null>(null)
   const creating = useRef(false)
+  const panelRef = useRef<HTMLDivElement>(null)
+  const composerRef = useRef<PaneComposerHandle>(null)
+  const [active, setActive] = useState(props.api.isActive)
+  const info = useApp((s) => (ptyId ? s.ptys[ptyId] : undefined))
+
+  useEffect(() => {
+    const sub = props.api.onDidActiveChange((e) => setActive(e.isActive))
+    return () => sub.dispose()
+  }, [props.api])
 
   // Follow parameter changes (e.g. the pane moved to another account).
   useEffect(() => {
@@ -161,8 +171,15 @@ export function TerminalPanel(props: IDockviewPanelProps) {
       /* hidden */
     }
     window.api.pty.resize(ptyId, term.cols, term.rows)
-    const focus = props.api.onDidActiveChange((e) => e.isActive && term.focus())
-    if (props.api.isActive) term.focus()
+    // A pane that becomes active (new pane, keyboard, rail click) puts the cursor in its message box,
+    // unless the user clicked straight into the terminal.
+    const focusBox = (): void => {
+      requestAnimationFrame(() => {
+        if (!panelRef.current?.contains(document.activeElement)) composerRef.current?.focus()
+      })
+    }
+    const focus = props.api.onDidActiveChange((e) => e.isActive && focusBox())
+    if (props.api.isActive) focusBox()
     return () => {
       cancelled = true
       unsubscribe()
@@ -173,9 +190,16 @@ export function TerminalPanel(props: IDockviewPanelProps) {
   }, [ptyId, alive, props.api])
 
   return (
-    <div className="flex h-full flex-col bg-panel" data-pty-id={ptyId} onMouseDown={() => termRef.current?.focus()}>
+    <div ref={panelRef} className="flex h-full min-h-0 flex-col bg-panel" data-pty-id={ptyId}>
       {ptyId && <LimitBanner ptyId={ptyId} />}
-      <div ref={host} className="min-h-0 flex-1 overflow-hidden" />
+      <div ref={host} className="min-h-0 flex-1 overflow-hidden" onMouseDown={() => termRef.current?.focus()} />
+      <PaneComposer
+        ref={composerRef}
+        ptyId={ptyId}
+        workspaceId={info?.workspaceId ?? params.workspaceId}
+        agentId={info?.agentId ?? params.agentId}
+        active={active}
+      />
     </div>
   )
 }

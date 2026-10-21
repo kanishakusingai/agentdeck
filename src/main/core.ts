@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, rmSync, writeFileSync } from 'fs'
 import { homedir } from 'os'
 import { basename, join, resolve } from 'path'
 import type { AppSnapshot, PtySnapshot, RunSummary } from '@shared/api'
+import type { SlashCommand } from '@shared/composer'
 import { accountLabel } from '@shared/accounts'
 import { agentById, PROVIDERS } from '@shared/agents'
 import {
@@ -23,6 +24,7 @@ import {
 import { accountEnv, resolveAccount } from './accounts'
 import { detectAgents } from './agents'
 import { asPastedMessage } from '@shared/paste'
+import { listCustomCommands, listWorkspaceFiles } from './composer-sources'
 import { buildHandoffSummary, handoffPrompt } from './handoff'
 import { ENHANCE_INSTRUCTION, runHeadless } from './headless'
 import { buildShellLaunch } from './launch'
@@ -150,6 +152,26 @@ export class AppCore {
 
   workspace(id: string): Workspace | undefined {
     return this.store.get('workspaces').find((w) => w.id === id)
+  }
+
+  // ---------- message box suggestions ----------
+
+  private fileCache = new Map<string, { at: number; files: Promise<string[]> }>()
+
+  customCommands(workspaceId: string, agentId?: string): Promise<SlashCommand[]> {
+    const ws = this.workspace(workspaceId)
+    return listCustomCommands(agentId, ws?.path ?? homedir(), homedir())
+  }
+
+  /** Workspace files for the @ picker, re-read at most every 15 seconds. */
+  workspaceFiles(workspaceId: string): Promise<string[]> {
+    const ws = this.workspace(workspaceId)
+    if (!ws || !existsSync(ws.path)) return Promise.resolve([])
+    const hit = this.fileCache.get(ws.path)
+    if (hit && Date.now() - hit.at < 15_000) return hit.files
+    const files = listWorkspaceFiles(ws.path)
+    this.fileCache.set(ws.path, { at: Date.now(), files })
+    return files
   }
 
   // ---------- agents ----------
