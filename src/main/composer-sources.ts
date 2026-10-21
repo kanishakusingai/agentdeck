@@ -122,6 +122,10 @@ export async function listCustomCommands(agentId: string | undefined, projectDir
         markdownCommands(join(homeDir, '.config', 'opencode', 'commands'))
       ])
       break
+    case 'kiro':
+      // Kiro runs installed skills as /<skill-name>.
+      found = await Promise.all([skills(join(projectDir, '.kiro', 'skills')), skills(join(homeDir, '.kiro', 'skills'))])
+      break
     default:
       return []
   }

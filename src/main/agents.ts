@@ -42,8 +42,10 @@ export function detectAgents(
   }
   return AGENT_CATALOG.map((agent) => {
     let path: string | undefined
+    const skip = (agent.notIn ?? []).map((s) => s.toLowerCase())
+    const searched = skip.length ? dirs.filter((d) => !skip.some((s) => d.toLowerCase().includes(s))) : dirs
     for (const bin of agent.bins) {
-      path = findOnPath(bin, dirs, exts)
+      path = findOnPath(bin, searched, exts)
       if (path) break
     }
     return { ...agent, installed: Boolean(path), path }

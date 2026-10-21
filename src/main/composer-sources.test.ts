@@ -23,6 +23,15 @@ beforeEach(() => {
 afterEach(() => rmSync(root, { recursive: true, force: true }))
 
 describe('listCustomCommands', () => {
+  it('finds Kiro skills in the project and the home folder', async () => {
+    put(join(project, '.kiro', 'skills', 'deploy', 'SKILL.md'), '---\nname: deploy\ndescription: Ship to prod\n---\n')
+    put(join(home, '.kiro', 'skills', 'review', 'SKILL.md'), '---\nname: review\ndescription: Review code\n---\n')
+    expect(await listCustomCommands('kiro', project, home)).toEqual([
+      { name: 'deploy', description: 'Ship to prod', source: 'skill' },
+      { name: 'review', description: 'Review code', source: 'skill' }
+    ])
+  })
+
   it('finds Claude commands and skills in the home folder and the project', async () => {
     put(join(home, '.claude', 'commands', 'ship.md'), '---\ndescription: Ship it\n---\nbody')
     put(join(home, '.claude', 'commands', 'git', 'pr.md'), 'Open a pull request\nmore')

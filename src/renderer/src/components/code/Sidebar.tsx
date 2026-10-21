@@ -1,14 +1,14 @@
-import { AppWindow, Globe, LayoutDashboard, Plus, X } from 'lucide-react'
+import { Globe, LayoutDashboard, Plus, X } from 'lucide-react'
 import { useEffect, useRef, type KeyboardEvent } from 'react'
 import { agentById } from '@shared/agents'
 import type { PtyInfo } from '@shared/types'
 import { accountName } from '../../lib/accounts'
 import { tracker, useActivityClock, type Activity } from '../../lib/activity'
-import { focusPty, openBrowserPane } from '../../lib/canvas'
+import { focusPty } from '../../lib/canvas'
 import { cn } from '../../lib/cn'
 import { browserLabel, DEFAULT_BROWSERS, MAIN_BROWSER } from '../../lib/sidebar'
 import { closeSidebarBrowser, newSidebarBrowser, rememberSidebarBrowserUrl, setSidebarTab, showSidebarBrowser, shownSidebarBrowser, useApp } from '../../lib/store'
-import { ActivityDot, activityLabel, activityText, AgentIcon, Menu, MenuContent, MenuItem, MenuTrigger } from '../ui'
+import { ActivityDot, activityLabel, activityText, AgentIcon, Tip } from '../ui'
 import { BrowserView } from './BrowserView'
 
 function elapsed(ms: number, now: number): string {
@@ -118,7 +118,6 @@ function onTabListKey(e: KeyboardEvent<HTMLDivElement>): void {
 export function Sidebar() {
   const tab = useApp((s) => s.snapshot!.ui.sidebarTab)
   const home = useApp((s) => s.snapshot!.settings.browserHomeUrl)
-  const workspaceId = useApp((s) => s.snapshot!.ui.activeWorkspaceId)
   const browsers = useApp((s) => s.snapshot!.ui.sidebarBrowsers) ?? DEFAULT_BROWSERS
   const shown = useApp((s) => shownSidebarBrowser(s.snapshot!.ui))
   const ptyMap = useApp((s) => s.ptys)
@@ -179,21 +178,11 @@ export function Sidebar() {
             )
           })}
         </div>
-        <Menu>
-          <MenuTrigger asChild>
-            <button aria-label="Add a browser" title="Add a browser" className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-fg-faint transition-colors hover:bg-hover hover:text-fg data-[state=open]:bg-hover data-[state=open]:text-fg" data-testid="sidebar-add">
-              <Plus size={14} />
-            </button>
-          </MenuTrigger>
-          <MenuContent align="end">
-            <MenuItem onSelect={newSidebarBrowser} data-testid="sidebar-new-browser">
-              <Globe size={13} className="text-fg-muted" /> New browser tab
-            </MenuItem>
-            <MenuItem disabled={!workspaceId} onSelect={() => workspaceId && void openBrowserPane(workspaceId, home)} data-testid="sidebar-browser-pane">
-              <AppWindow size={13} className="text-fg-muted" /> Browser on screen, as a pane
-            </MenuItem>
-          </MenuContent>
-        </Menu>
+        <Tip label="New browser tab">
+          <button aria-label="New browser tab" onClick={newSidebarBrowser} className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-fg-faint transition-colors hover:bg-hover hover:text-fg" data-testid="sidebar-add">
+            <Plus size={14} />
+          </button>
+        </Tip>
       </div>
       <div className="relative min-h-0 flex-1">
         {/* Keep every browser mounted so pages don't reload when switching tabs. */}
@@ -202,7 +191,6 @@ export function Sidebar() {
             <BrowserView
               initialUrl={b.url ?? home}
               onUrlChange={(url) => rememberSidebarBrowserUrl(b.id, url)}
-              onPopOut={workspaceId ? (url) => void openBrowserPane(workspaceId, url) : undefined}
             />
           </div>
         ))}

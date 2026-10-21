@@ -1,8 +1,10 @@
-import { ChevronDown, RefreshCw, Sparkles, SquareTerminal } from 'lucide-react'
+import { ChevronDown, LayoutGrid, RefreshCw, Sparkles, SquareTerminal } from 'lucide-react'
+import { launchMenuAgents } from '@shared/agents'
 import { SYSTEM_ACCOUNT_ID, type DetectedAgent } from '@shared/types'
 import { resolveAccountName } from '../../lib/accounts'
 import { openTerminal } from '../../lib/canvas'
 import { refreshAgents, toast, useApp } from '../../lib/store'
+import { openAgentsDirectory } from './AgentsDirectory'
 import { AgentIcon, Button, Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger } from '../ui'
 
 function AgentItem({ agent, workspaceId, sessionId }: { agent: DetectedAgent; workspaceId: string; sessionId?: string }) {
@@ -12,10 +14,11 @@ function AgentItem({ agent, workspaceId, sessionId }: { agent: DetectedAgent; wo
   const defaultName = useApp((s) => (agent.provider ? resolveAccountName(s.snapshot!, agent.provider, workspaceId) : ''))
 
   if (!agent.installed) {
+    // Not on this PC yet: open the agents page, which shows how to install it.
     return (
-      <MenuItem disabled hint="Not installed">
-        <AgentIcon agentId={agent.id} size={13} />
-        {agent.label}
+      <MenuItem onSelect={() => openAgentsDirectory({ workspaceId, sessionId })} hint="Get it">
+        <AgentIcon agentId={agent.id} size={13} className="opacity-50" />
+        <span className="text-fg-muted">{agent.label}</span>
       </MenuItem>
     )
   }
@@ -50,11 +53,12 @@ function AgentItem({ agent, workspaceId, sessionId }: { agent: DetectedAgent; wo
   )
 }
 
-/** The one "Launch" button: a plain terminal at the top, then every agent. */
+/** The one "Launch" button: a plain terminal at the top, then the 10 agents that matter most here, then "All agents…". */
 export function LaunchMenu({ workspaceId, sessionId, compact }: { workspaceId: string; sessionId?: string; compact?: boolean }) {
   const agents = useApp((s) => s.agents)
-  const installed = agents.filter((a) => a.installed)
-  const missing = agents.filter((a) => !a.installed)
+  const short = launchMenuAgents(agents)
+  const installed = short.filter((a) => a.installed)
+  const missing = short.filter((a) => !a.installed)
   return (
     <Menu>
       <MenuTrigger asChild>
@@ -77,18 +81,17 @@ export function LaunchMenu({ workspaceId, sessionId, compact }: { workspaceId: s
         {missing.length > 0 && (
           <>
             <MenuSeparator />
-            <MenuLabel>Not installed</MenuLabel>
+            <MenuLabel>Popular — not installed</MenuLabel>
             {missing.map((a) => (
               <AgentItem key={a.id} agent={a} workspaceId={workspaceId} sessionId={sessionId} />
             ))}
           </>
         )}
         <MenuSeparator />
-        <MenuItem
-          onSelect={() =>
-            void refreshAgents().then(() => toast('Checked again for installed agents.'))
-          }
-        >
+        <MenuItem onSelect={() => openAgentsDirectory({ workspaceId, sessionId })} hint={``} data-testid="all-agents">
+          <LayoutGrid size={13} className="text-fg-muted" /> All agents…
+        </MenuItem>
+        <MenuItem onSelect={() => void refreshAgents().then(() => toast('Checked again for installed agents.'))}>
           <RefreshCw size={13} className="text-fg-muted" /> Scan again
         </MenuItem>
       </MenuContent>

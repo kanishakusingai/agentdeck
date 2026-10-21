@@ -17,7 +17,7 @@ function fakeAgent(): DetectedAgent {
     chmodSync(path, 0o755)
   }
   return {
-    id: 'fake', label: 'Fake', bins: ['fake'], installed: true, path,
+    id: 'fake', label: 'Fake', bins: ['fake'], installed: true, path, maker: 'Test', blurb: 'A fake agent', url: 'https://example.com',
     headless: { args: ['-p'], editArgs: ['-p', '--edit'] }
   }
 }

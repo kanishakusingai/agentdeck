@@ -1,7 +1,8 @@
 import * as RDialog from '@radix-ui/react-dialog'
-import { ArrowLeft, ArrowRight, FolderOpen, FolderPlus, Loader2, Zap } from 'lucide-react'
+import { ArrowLeft, ArrowRight, FolderOpen, FolderPlus, Loader2, SquareTerminal, Zap } from 'lucide-react'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { create } from 'zustand'
+import { openTerminal } from '../../lib/canvas'
 import { cn } from '../../lib/cn'
 import { errorText, setActiveWorkspace, setMode, toast } from '../../lib/store'
 import { Button } from '../ui'
@@ -20,7 +21,24 @@ async function createProject(name: string, where: 'folder' | 'none'): Promise<bo
     if (!id) return false // folder picker cancelled
     setMode('code')
     setActiveWorkspace(id)
-    toast(`Project “${name}” is ready. Launch an agent or open a terminal to start.`, 'success')
+    toast(`Project “${name}” is ready. Use Launch to open a terminal or an agent.`, 'success')
+    return true
+  } catch (err) {
+    toast(errorText(err), 'error')
+    return false
+  }
+}
+
+/** Where "Continue without a project" works: the user's own folder, under this name in the side panel. */
+export const QUICK_SESSIONS = 'Quick sessions'
+
+/** Skip making a project: open a terminal in the user's own folder straight away. */
+async function continueWithoutProject(): Promise<boolean> {
+  try {
+    const id = await window.api.workspaces.addScratch(QUICK_SESSIONS)
+    setMode('code')
+    setActiveWorkspace(id)
+    await openTerminal({ workspaceId: id })
     return true
   } catch (err) {
     toast(errorText(err), 'error')
@@ -37,12 +55,12 @@ function Choice({ icon, title, body, hint, onClick, testId, primary, busy }: { i
       className={cn(
         'group flex flex-col items-start gap-3 rounded-xl border p-5 text-left transition-[border-color,background-color,transform] duration-150 active:translate-y-px disabled:opacity-60',
         primary
-          ? 'border-accent/45 bg-linear-to-b from-accent/[0.14] to-accent/[0.05] hover:border-accent/80'
+          ? 'border-[#4a4a54] bg-linear-to-b from-white/[0.07] to-white/[0.02] hover:border-[#71717a]'
           : 'border-line-strong bg-surface hover:border-fg-faint/60 hover:bg-raised'
       )}
     >
       <div className="flex w-full items-center justify-between">
-        <span className={cn('flex h-9 w-9 items-center justify-center rounded-lg', primary ? 'bg-linear-to-b from-[#4c8df6] to-[#2563eb] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.25)]' : 'bg-hover text-warn')}>
+        <span className={cn('flex h-9 w-9 items-center justify-center rounded-lg', primary ? 'bg-linear-to-b from-[#fafafa] to-[#dedee2] text-[#0b0b0d] shadow-[inset_0_1px_0_#ffffff]' : 'bg-hover text-fg-muted')}>
           {busy ? <Loader2 size={18} className="animate-spin" /> : icon}
         </span>
         <ArrowRight size={16} className="text-fg-faint transition-transform group-hover:translate-x-0.5 group-hover:text-fg" />
@@ -60,7 +78,7 @@ function Choice({ icon, title, body, hint, onClick, testId, primary, busy }: { i
 export function NewProjectForm({ onDone, autoFocus = true }: { onDone?: () => void; autoFocus?: boolean }) {
   const [step, setStep] = useState<1 | 2>(1)
   const [name, setName] = useState('')
-  const [busy, setBusy] = useState<'folder' | 'none' | null>(null)
+  const [busy, setBusy] = useState<'folder' | 'none' | 'quick' | null>(null)
   const input = useRef<HTMLInputElement>(null)
   useEffect(() => {
     if (step === 1 && autoFocus) requestAnimationFrame(() => input.current?.focus())
@@ -75,6 +93,13 @@ export function NewProjectForm({ onDone, autoFocus = true }: { onDone?: () => vo
       setName('')
       onDone?.()
     }
+  }
+
+  const quick = async (): Promise<void> => {
+    setBusy('quick')
+    const ok = await continueWithoutProject()
+    setBusy(null)
+    if (ok) onDone?.()
   }
 
   return (
@@ -104,12 +129,31 @@ export function NewProjectForm({ onDone, autoFocus = true }: { onDone?: () => vo
               onChange={(e) => setName(e.target.value)}
               placeholder="e.g. My website, Shop app, Experiments"
               data-testid="project-name"
-              className="h-11 w-full rounded-xl border border-line-strong bg-surface px-4 text-[15px] text-fg shadow-[inset_0_1px_2px_rgba(0,0,0,0.25)] placeholder:text-fg-faint focus:border-accent focus:outline-none focus:ring-3 focus:ring-accent/20"
+              className="h-11 w-full rounded-xl border border-line-strong bg-surface px-4 text-[15px] text-fg shadow-[inset_0_1px_2px_rgba(0,0,0,0.25)] placeholder:text-fg-faint focus:border-[#6b6b75] focus:outline-none focus:ring-3 focus:ring-white/[0.07]"
             />
           </label>
           <Button type="submit" variant="primary" size="lg" disabled={!name.trim()} data-testid="project-next">
             Continue <ArrowRight size={15} />
           </Button>
+          <div className="my-1 flex items-center gap-3 text-2xs uppercase tracking-[0.08em] text-fg-faint" aria-hidden>
+            <span className="h-px flex-1 bg-line" /> or <span className="h-px flex-1 bg-line" />
+          </div>
+          <button
+            type="button"
+            onClick={() => void quick()}
+            disabled={busy !== null}
+            data-testid="continue-without-project"
+            className="group flex items-center gap-3 rounded-xl border border-line-strong bg-surface px-4 py-3 text-left transition-colors hover:border-[#4a4a54] hover:bg-raised disabled:opacity-60"
+          >
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-hover text-fg-muted">
+              {busy === 'quick' ? <Loader2 size={16} className="animate-spin" /> : <SquareTerminal size={16} />}
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-[13px] font-medium text-fg">Continue without a project</span>
+              <span className="block text-xs text-fg-faint">Open a terminal in your own folder now — no name, no setup.</span>
+            </span>
+            <ArrowRight size={15} className="shrink-0 text-fg-faint transition-transform group-hover:translate-x-0.5 group-hover:text-fg" />
+          </button>
         </form>
       ) : (
         <div className="flex flex-col gap-3">

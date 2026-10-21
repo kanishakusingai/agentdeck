@@ -23,6 +23,19 @@ describe('detectAgents', () => {
     expect(agents.find((a) => a.id === 'codex')!.path).toBe(join(dir, 'codex.cmd'))
   })
 
+  it('ignores an editor’s launcher that has the same name as a CLI', () => {
+    const root = mkdtempSync(join(tmpdir(), 'agentdeck-path-'))
+    const ide = join(root, 'Qoder IDE', 'bin')
+    mkdirSync(ide, { recursive: true })
+    writeFileSync(join(ide, 'qoder.cmd'), '')
+    const env = { PATH: ide, PATHEXT: '.EXE;.CMD' }
+    expect(detectAgents(env, 'win32').find((a) => a.id === 'qoder')!.installed).toBe(false)
+    // The real CLI elsewhere on PATH is still found
+    const cli = fakeBin(['qoder.cmd'])
+    const found = detectAgents({ ...env, PATH: [ide, cli].join(delimiter) }, 'win32').find((a) => a.id === 'qoder')!
+    expect(found.path).toBe(join(cli, 'qoder.cmd'))
+  })
+
   it('marks missing agents as not installed', () => {
     const dir = fakeBin(['claude.cmd'])
     const agents = detectAgents({ PATH: dir, PATHEXT: '.EXE;.CMD' }, 'win32')

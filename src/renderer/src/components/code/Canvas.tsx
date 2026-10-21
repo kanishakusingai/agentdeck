@@ -1,5 +1,5 @@
 import { DockviewReact, themeDark, type DockviewReadyEvent, type DockviewTheme, type IDockviewHeaderActionsProps, type IDockviewPanelHeaderProps, type IDockviewPanelProps, type IWatermarkPanelProps } from 'dockview-react'
-import { ChevronDown, Columns2, FolderOpen, Globe, Grid2x2, LayoutGrid, Maximize2, MessagesSquare, Plus, Rows2, Square, SquareTerminal, X } from 'lucide-react'
+import { Check, ChevronDown, Columns2, FolderOpen, Globe, Grid2x2, Layers, LayoutGrid, Maximize2, MessagesSquare, Pencil, Plus, Rows2, Square, SquareTerminal, Trash2, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { agentById } from '@shared/agents'
 import { MAX_PANES_PER_SESSION, sessionsOf } from '@shared/types'
@@ -7,7 +7,7 @@ import { accountName } from '../../lib/accounts'
 import { tracker, useActivityClock } from '../../lib/activity'
 import { activeSessionId, arrange, hidePanel, openTerminal, openThreadPane, registerCanvas, restoreLayout, sessionOfApi, showSession, toggleZoom, type PanelParams } from '../../lib/canvas'
 import { cn } from '../../lib/cn'
-import { newSession } from '../../lib/sessions'
+import { deleteSession, newSession, renameSession } from '../../lib/sessions'
 import { toast, useApp } from '../../lib/store'
 import { ThreadView } from '../thread/ThreadView'
 import { ActivityDot, AgentIcon, ContextMenu, IconButton, Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger, Tip } from '../ui'
@@ -53,7 +53,7 @@ function PaneTab(props: IDockviewPanelHeaderProps) {
       <div className="group flex h-full items-center gap-2 pr-0.5 text-xs" data-testid="pane-tab">
         {info && <ActivityDot activity={tracker.activity(info, now)} />}
         {params.kind === 'browser' ? (
-          <Globe size={13} className="text-accent" />
+          <Globe size={13} className="text-fg-muted" />
         ) : params.kind === 'thread' ? (
           <MessagesSquare size={13} className="text-fg-muted" />
         ) : (
@@ -163,41 +163,58 @@ export function Canvas({ workspaceId, sessionId, visible }: { workspaceId: strin
   )
 }
 
-/** Session switcher above the canvas (each session is its own screen of panes). */
-function SessionTabs({ workspaceId }: { workspaceId: string }) {
+/** Session switcher above the canvas: one dropdown (each session is its own screen of panes). */
+function SessionMenu({ workspaceId }: { workspaceId: string }) {
   const ws = useApp((s) => s.snapshot!.workspaces.find((w) => w.id === workspaceId))
   const active = useApp((s) => {
     void s.snapshot!.ui.activeSessions
     return activeSessionId(workspaceId)
   })
+  const panels = useApp((s) => s.panels)
+  const hidden = useApp((s) => s.hidden)
   if (!ws) return null
   const sessions = sessionsOf(ws)
+  const current = sessions.find((s) => s.id === active) ?? sessions[0]
+  const count = (id: string): number => (panels[id]?.length ?? 0) + (hidden[id]?.length ?? 0)
   return (
-    <div role="tablist" aria-label="Sessions" className="flex min-w-0 items-center gap-0.5 rounded-lg border border-line bg-panel p-0.5">
-      {sessions.map((s) => (
+    <Menu>
+      <MenuTrigger asChild>
         <button
-          key={s.id}
-          role="tab"
-          aria-selected={s.id === active}
-          onClick={() => showSession(s.id)}
-          data-testid="session-tab"
-          className={cn(
-            'h-6 max-w-[140px] truncate rounded-md px-2.5 text-xs font-medium transition-colors',
-            s.id === active ? 'bg-hover text-fg shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]' : 'text-fg-faint hover:text-fg'
-          )}
+          title="Switch session — each session is a separate screen in this project"
+          data-testid="session-menu"
+          className="flex h-7 min-w-0 max-w-[220px] items-center gap-1.5 rounded-lg border border-line bg-panel px-2 text-xs font-medium text-fg transition-colors hover:bg-hover data-[state=open]:bg-hover"
         >
-          {s.name}
+          <Layers size={13} className="shrink-0 text-fg-muted" />
+          <span className="truncate" data-testid="session-current">
+            {current.name}
+          </span>
+          <ChevronDown size={12} className="shrink-0 opacity-60" />
         </button>
-      ))}
-      <Tip label="New session — a separate screen in this project">
-        <button aria-label="New session" onClick={() => void newSession(workspaceId)} className="flex h-6 w-6 items-center justify-center rounded-md text-fg-faint hover:bg-hover hover:text-fg" data-testid="new-session">
-          <Plus size={13} />
-        </button>
-      </Tip>
-    </div>
+      </MenuTrigger>
+      <MenuContent align="end" className="min-w-[240px]">
+        <MenuLabel>Sessions in {ws.name}</MenuLabel>
+        {sessions.map((s) => (
+          <MenuItem key={s.id} onSelect={() => showSession(s.id)} hint={`${count(s.id)} pane${count(s.id) === 1 ? '' : 's'}`} data-testid="session-item">
+            <Check size={13} className={cn('shrink-0', s.id === current.id ? 'text-fg' : 'invisible')} aria-hidden />
+            <span className={cn('truncate', s.id === current.id && 'font-semibold')}>{s.name}</span>
+          </MenuItem>
+        ))}
+        <MenuSeparator />
+        <MenuItem onSelect={() => void newSession(workspaceId)} data-testid="new-session">
+          <Plus size={13} className="text-fg-muted" /> New session
+        </MenuItem>
+        <MenuItem onSelect={() => void renameSession(workspaceId, current.id)}>
+          <Pencil size={13} className="text-fg-muted" /> Rename “{current.name}”
+        </MenuItem>
+        {sessions.length > 1 && (
+          <MenuItem danger onSelect={() => void deleteSession(workspaceId, current.id)}>
+            <Trash2 size={13} /> Delete “{current.name}”
+          </MenuItem>
+        )}
+      </MenuContent>
+    </Menu>
   )
 }
-
 /** One small dropdown for arranging the panes (instead of four buttons in the header). */
 function LayoutMenu({ sessionId, count }: { sessionId: string; count: number }) {
   return (
@@ -259,7 +276,7 @@ export function CanvasToolbar({ workspaceId }: { workspaceId: string }) {
           </span>
         </button>
       </div>
-      <SessionTabs workspaceId={workspaceId} />
+      <SessionMenu workspaceId={workspaceId} />
       <LayoutMenu sessionId={sessionId} count={count} />
       <LaunchMenu workspaceId={workspaceId} sessionId={sessionId} />
     </div>

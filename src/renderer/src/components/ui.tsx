@@ -3,7 +3,7 @@ import * as RMenu from '@radix-ui/react-dropdown-menu'
 import * as RSelect from '@radix-ui/react-select'
 import * as RTooltip from '@radix-ui/react-tooltip'
 import { cva, type VariantProps } from 'class-variance-authority'
-import { Asterisk, Atom, Boxes, Check, ChevronDown, Feather, Moon, Orbit, SquareTerminal, X, Zap } from 'lucide-react'
+import { Asterisk, Atom, Boxes, Braces, Brain, Check, ChevronDown, FastForward, Feather, Hammer, Moon, Orbit, Pi, SquareTerminal, X, Zap } from 'lucide-react'
 import { Children, forwardRef, isValidElement, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactElement, type ReactNode, type TextareaHTMLAttributes } from 'react'
 import { createPortal } from 'react-dom'
 import type { PaneStatus } from '@shared/types'
@@ -11,9 +11,9 @@ import type { Activity } from '../lib/activity'
 import { cn } from '../lib/cn'
 
 // ---------- Button ----------
-// Call-to-action style: a soft top-to-bottom gradient, a crisp 1px border in a
-// deeper shade, a bright inner top edge and a small drop shadow, so buttons look
-// pressable. Blue for the main action, white for the second one.
+// Call-to-action style: a soft top-to-bottom gradient, a crisp 1px border, a bright
+// inner top edge and a small drop shadow, so buttons look pressable. The main action
+// is near-white on the dark app (highest contrast, no colour); the second one is graphite.
 
 const button = cva(
   'inline-flex items-center justify-center gap-1.5 whitespace-nowrap font-medium tracking-[-0.005em] transition-[background,box-shadow,border-color,color,transform] duration-150 active:translate-y-px disabled:pointer-events-none disabled:opacity-45 no-drag',
@@ -21,9 +21,9 @@ const button = cva(
     variants: {
       variant: {
         primary:
-          'border border-[#1d4ed8] bg-linear-to-b from-[#4c8df6] to-[#2563eb] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.28),0_1px_2px_rgba(0,0,0,0.45),0_0_0_1px_rgba(37,99,235,0.15)] hover:from-[#5d9bff] hover:to-[#3071f0] active:from-[#2f6fe8] active:to-[#2563eb]',
+          'border border-[#e4e4e7] bg-linear-to-b from-[#fafafa] to-[#dedee2] text-[#0b0b0d] shadow-[inset_0_1px_0_#ffffff,0_1px_2px_rgba(0,0,0,0.5)] hover:from-white hover:to-[#e8e8eb] active:from-[#ececee] active:to-[#d8d8dc]',
         secondary:
-          'border border-[#d4d4d8] bg-linear-to-b from-white to-[#ececef] text-[#18181b] shadow-[inset_0_1px_0_#ffffff,0_1px_2px_rgba(0,0,0,0.4)] hover:to-[#e2e2e6] active:from-[#f1f1f3] active:to-[#e4e4e7]',
+          'border border-line-strong bg-linear-to-b from-[#25252a] to-[#1b1b1f] text-fg shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_1px_2px_rgba(0,0,0,0.4)] hover:border-[#4a4a54] hover:from-[#2c2c32] hover:to-[#212126] active:from-[#1f1f23] active:to-[#1b1b1f]',
         ghost: 'rounded-md text-fg-muted hover:bg-hover hover:text-fg active:translate-y-0',
         danger:
           'border border-[#b91c1c] bg-linear-to-b from-[#f05252] to-[#dc2626] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.25),0_1px_2px_rgba(0,0,0,0.45)] hover:from-[#f56565] hover:to-[#e02d2d]'
@@ -87,7 +87,7 @@ IconButton.displayName = 'IconButton'
 // ---------- Form controls ----------
 
 const field =
-  'w-full rounded-[10px] border border-line-strong bg-surface px-3 text-sm text-fg shadow-[inset_0_1px_2px_rgba(0,0,0,0.25)] placeholder:text-fg-faint focus:border-accent focus:outline-none focus:ring-3 focus:ring-accent/20'
+  'w-full rounded-[10px] border border-line-strong bg-surface px-3 text-sm text-fg shadow-[inset_0_1px_2px_rgba(0,0,0,0.25)] placeholder:text-fg-faint focus:border-[#6b6b75] focus:outline-none focus:ring-3 focus:ring-white/[0.07]'
 
 export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement>>(({ className, ...props }, ref) => (
   <input ref={ref} className={cn(field, 'h-9', className)} {...props} />
@@ -141,7 +141,7 @@ export function Select({ value, onChange, children, className, disabled, 'aria-l
         aria-label={ariaLabel}
         className={cn(
           field,
-          'group flex h-9 cursor-pointer items-center justify-between gap-2 text-left hover:border-fg-faint/60 data-[state=open]:border-accent data-[state=open]:ring-3 data-[state=open]:ring-accent/20',
+          'group flex h-9 cursor-pointer items-center justify-between gap-2 text-left hover:border-fg-faint/60 data-[state=open]:border-[#6b6b75] data-[state=open]:ring-3 data-[state=open]:ring-white/[0.07]',
           className
         )}
       >
@@ -189,11 +189,18 @@ export function Toggle({ checked, onChange, label }: { checked: boolean; onChang
       aria-label={label}
       onClick={() => onChange(!checked)}
       className={cn(
-        'relative inline-flex h-[18px] w-8 shrink-0 items-center rounded-full border transition-colors',
-        checked ? 'border-accent-solid bg-accent-solid' : 'border-line-strong bg-raised'
+        'relative inline-flex h-[22px] w-[40px] shrink-0 items-center rounded-full border transition-colors duration-150',
+        checked ? 'border-accent-solid bg-accent-solid' : 'border-line-strong bg-hover'
       )}
     >
-      <span className={cn('h-3 w-3 rounded-full transition-transform', checked ? 'translate-x-[15px] bg-white' : 'translate-x-[2px] bg-fg-muted')} />
+      {/* The knob fills the track's height (1px gap), like a native switch. */}
+      <span
+        aria-hidden
+        className={cn(
+          'h-[18px] w-[18px] rounded-full shadow-[0_1px_3px_rgba(0,0,0,0.45)] transition-transform duration-150',
+          checked ? 'translate-x-[19px] bg-white' : 'translate-x-[1px] bg-[#d4d4d8]'
+        )}
+      />
     </button>
   )
 }
@@ -259,7 +266,12 @@ const FALLBACK_MARKS: Record<string, { icon: typeof Asterisk; color: string }> =
   auggie: { icon: Orbit, color: '#a3e635' },
   codebuff: { icon: Atom, color: '#60a5fa' },
   kimi: { icon: Moon, color: '#a1a1aa' },
-  amp: { icon: Zap, color: '#f97316' }
+  amp: { icon: Zap, color: '#f97316' },
+  continue: { icon: FastForward, color: '#e4e4e7' },
+  letta: { icon: Brain, color: '#f472b6' },
+  forge: { icon: Hammer, color: '#fb923c' },
+  interpreter: { icon: Braces, color: '#e4e4e7' },
+  pi: { icon: Pi, color: '#e4e4e7' }
 }
 
 /** The product's logo for an agent (or a terminal icon for plain shells). */
@@ -364,11 +376,11 @@ export function Dialog({
 
 /** The floating panel of every dropdown menu and select. */
 export const menuSurface =
-  'menu-pop z-50 min-w-[220px] overflow-hidden rounded-xl border border-white/[0.09] bg-[#141417]/95 p-1.5 text-[13px] text-fg shadow-[0_18px_50px_-8px_rgba(0,0,0,0.75),0_2px_6px_rgba(0,0,0,0.4),inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-xl'
+  'menu-pop z-50 min-w-[220px] max-h-[var(--radix-dropdown-menu-content-available-height,480px)] overflow-y-auto rounded-xl border border-white/[0.09] bg-[#141417]/95 p-1.5 text-[13px] text-fg shadow-[0_18px_50px_-8px_rgba(0,0,0,0.75),0_2px_6px_rgba(0,0,0,0.4),inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-xl'
 
 /** A row inside a dropdown. */
 export const menuItem =
-  'relative flex h-8 cursor-default select-none items-center gap-2.5 rounded-lg px-2.5 outline-none transition-colors duration-75 data-[disabled]:pointer-events-none data-[disabled]:opacity-40 data-[highlighted]:bg-linear-to-b data-[highlighted]:from-[#3b82f6] data-[highlighted]:to-[#2563eb] data-[highlighted]:text-white data-[highlighted]:shadow-[inset_0_1px_0_rgba(255,255,255,0.18)] data-[state=open]:bg-hover data-[highlighted]:[&_svg]:text-white! data-[highlighted]:[&_.menu-hint]:text-white/75'
+  'relative flex h-8 cursor-default select-none items-center gap-2.5 rounded-lg px-2.5 outline-none transition-colors duration-75 data-[disabled]:pointer-events-none data-[disabled]:opacity-40 data-[highlighted]:bg-[#27272d] data-[highlighted]:text-fg data-[highlighted]:shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] data-[state=open]:bg-hover data-[highlighted]:[&_.menu-hint]:text-fg-muted'
 
 export const Menu = RMenu.Root
 export const MenuTrigger = RMenu.Trigger
@@ -438,7 +450,7 @@ export function MenuItem({
       data-testid={testId}
       disabled={disabled}
       onSelect={onSelect}
-      className={cn(menuItem, danger && 'text-err data-[highlighted]:from-[#ef4444] data-[highlighted]:to-[#dc2626]')}
+      className={cn(menuItem, danger && 'text-err data-[highlighted]:bg-err/15 data-[highlighted]:text-err')}
     >
       <span className="flex min-w-0 flex-1 items-center gap-2.5">{children}</span>
       {hint && <span className="menu-hint shrink-0 text-xs text-fg-faint">{hint}</span>}

@@ -8,9 +8,9 @@ import { useApp } from './store'
 export const TERMINAL_THEME: ITheme = {
   background: '#0e0e11',
   foreground: '#e4e4e7',
-  cursor: '#60a5fa',
+  cursor: '#f4f4f5',
   cursorAccent: '#0e0e11',
-  selectionBackground: '#3b82f64d',
+  selectionBackground: '#ffffff2e',
   black: '#1b1b1f',
   red: '#f87171',
   green: '#4ade80',

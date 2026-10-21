@@ -124,9 +124,8 @@ export const PaneComposer = forwardRef<PaneComposerHandle, Props>(function PaneC
   const suggestions: Suggestion[] = useMemo(() => {
     if (!trigger) return []
     if (trigger.kind === 'command') {
-      return rankSuggestions(allCommands, trigger.query, (c) => c.name)
-        .slice(0, 60)
-        .map((command) => ({ kind: 'command', id: `c:${command.name}`, command }))
+      // Every command is listed (the list scrolls); Kiro alone has over 80.
+      return rankSuggestions(allCommands, trigger.query, (c) => c.name).map((command) => ({ kind: 'command', id: `c:${command.name}`, command }))
     }
     return rankFiles(files ?? [], trigger.query, 60).map((path) => ({ kind: 'file', id: `f:${path}`, path }))
   }, [trigger?.kind, trigger?.query, allCommands, files]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -299,7 +298,7 @@ export const PaneComposer = forwardRef<PaneComposerHandle, Props>(function PaneC
                 onClick={() => choose(s, false)}
                 className={cn(
                   'flex h-8 cursor-default select-none items-center gap-2.5 rounded-lg px-2.5',
-                  i === current && 'bg-linear-to-b from-[#3b82f6] to-[#2563eb] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.18)]'
+                  i === current && 'bg-[#27272d] text-fg shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]'
                 )}
               >
                 {s.kind === 'command' ? (
@@ -333,7 +332,7 @@ export const PaneComposer = forwardRef<PaneComposerHandle, Props>(function PaneC
         className={cn(
           'rounded-[11px] border bg-surface transition-[border-color,box-shadow] duration-150',
           active ? 'border-line-strong' : 'border-line',
-          'focus-within:border-accent/70 focus-within:shadow-[0_0_0_3px_rgba(59,130,246,0.12)]'
+          'focus-within:border-[#5b5b66] focus-within:shadow-[0_0_0_3px_rgba(255,255,255,0.05)]'
         )}
       >
         <textarea
@@ -405,7 +404,7 @@ export const PaneComposer = forwardRef<PaneComposerHandle, Props>(function PaneC
               aria-label="Send"
               onClick={() => send()}
               disabled={!text.trim()}
-              className="flex h-7 w-7 items-center justify-center rounded-lg border border-[#1d4ed8] bg-linear-to-b from-[#4c8df6] to-[#2563eb] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.28),0_1px_2px_rgba(0,0,0,0.45)] transition-all hover:from-[#5d9bff] hover:to-[#3071f0] active:translate-y-px disabled:border-line-strong disabled:from-hover disabled:to-hover disabled:text-fg-faint disabled:shadow-none"
+              className="flex h-7 w-7 items-center justify-center rounded-lg border border-[#e4e4e7] bg-linear-to-b from-[#fafafa] to-[#dedee2] text-[#0b0b0d] shadow-[inset_0_1px_0_#ffffff,0_1px_2px_rgba(0,0,0,0.45)] transition-all hover:from-white hover:to-[#e8e8eb] active:translate-y-px disabled:border-line-strong disabled:from-hover disabled:to-hover disabled:text-fg-faint disabled:shadow-none"
             >
               <ArrowUp size={14} strokeWidth={2.5} />
             </button>

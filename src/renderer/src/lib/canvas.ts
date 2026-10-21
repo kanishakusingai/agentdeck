@@ -264,24 +264,6 @@ export function openPtyBeside(existingPtyId: string, info: PtyInfo): void {
   addTerminalPanel(api, info, found ? { referencePanel: found.panel.id, direction: 'right' } : placement(api))
 }
 
-export async function openBrowserPane(workspaceId: string, url: string): Promise<void> {
-  const sessionId = activeSessionId(workspaceId)
-  if (!hasRoom(sessionId)) return
-  showSession(sessionId)
-  const api = await whenCanvas(sessionId)
-  const params: PanelParams = { kind: 'browser', workspaceId, url }
-  place(sessionId, api, (position) =>
-    api.addPanel({
-      id: `browser-${crypto.randomUUID()}`,
-      component: 'browser',
-      title: 'Browser',
-      params: params as unknown as Record<string, unknown>,
-      renderer: 'always',
-      position
-    })
-  )
-}
-
 export async function openThreadPane(workspaceId: string, threadId: string, title: string): Promise<void> {
   const sessionId = activeSessionId(workspaceId)
   showSession(sessionId)

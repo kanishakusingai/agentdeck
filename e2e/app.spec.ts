@@ -159,14 +159,18 @@ test('the whole app: projects, sessions, terminals, layout, modes, persistence',
   await expect(page.getByTestId('context-menu')).toBeVisible()
   await page.getByRole('menuitem', { name: 'Move to session' }).click()
   await page.getByRole('menuitem', { name: 'New session' }).click()
-  await expect(page.getByTestId('session-tab')).toHaveCount(2)
-  await expect(page.getByTestId('session-tab').nth(1)).toHaveAttribute('aria-selected', 'true')
+  await expect(page.getByTestId('session-current')).toHaveText('Session 2')
+  // Sessions are switched from one dropdown
+  await page.getByTestId('session-menu').click()
+  await expect(page.getByTestId('session-item')).toHaveCount(2)
+  await shot(page, '03e0-session-menu')
+  await page.keyboard.press('Escape')
   await expect(tabs(page)).toHaveCount(1)
   await expect(tabs(page).first()).toContainText('Terminal 3')
   await shot(page, '03e-session-2')
   // Drag it back onto Session 1 in the side panel
   await page.getByTestId('pane-row').filter({ hasText: 'Terminal 3' }).dragTo(page.getByTestId('session-row').first())
-  await expect(page.getByTestId('session-tab').first()).toHaveAttribute('aria-selected', 'true')
+  await expect(page.getByTestId('session-current')).toHaveText('Session 1')
   await expect(tabs(page)).toHaveCount(4)
   await shot(page, '03f-dragged-back')
 
@@ -203,11 +207,23 @@ test('the whole app: projects, sessions, terminals, layout, modes, persistence',
   await closePane(page, 'Terminal 4')
   await expect(page.getByTestId('dashboard-row')).toHaveCount(3)
 
-  // 7. Launch menu lists the catalog, Kiro CLI included
+  // 7. Launch menu: Terminal, ten agents (installed ones first), then "All agents…"
   await page.getByTestId('launch').first().click()
-  await expect(page.getByRole('menuitem', { name: /Aider/ })).toBeVisible()
   await expect(page.getByRole('menuitem', { name: /Kiro CLI/ })).toBeVisible()
+  await expect(page.getByRole('menuitem', { name: /Claude Code/ })).toBeVisible()
+  await expect(page.getByRole('menuitem', { name: /Aider/ })).toHaveCount(0)
   await shot(page, '04-launch-menu')
+  // "All agents…" opens the full list, with how to install each one
+  await page.getByTestId('all-agents').click()
+  await expect(page.getByTestId('agents-directory')).toBeVisible()
+  expect(await page.getByTestId('agent-card').count()).toBeGreaterThanOrEqual(27)
+  await shot(page, '04a-all-agents')
+  await page.getByTestId('agents-search').fill('aider')
+  await expect(page.getByTestId('agent-card')).toHaveCount(1)
+  await expect(page.getByTestId('agent-card')).toContainText('aider-install')
+  await page.keyboard.press('Escape')
+  await expect(page.getByTestId('agents-directory')).toBeHidden()
+  await page.getByTestId('launch').first().click()
 
   // 7b. Launching an agent opens it in a pane; a usage limit becomes a choice
   await page.getByRole('menuitem', { name: /Claude Code/ }).click()
@@ -236,7 +252,6 @@ test('the whole app: projects, sessions, terminals, layout, modes, persistence',
   await expect(page.getByLabel('Address').locator('visible=true')).toHaveValue('http://localhost:3000')
   for (let i = 0; i < 3; i++) {
     await page.getByTestId('sidebar-add').click()
-    await page.getByTestId('sidebar-new-browser').click()
   }
   await expect(page.getByTestId('sidebar-browser-tab')).toHaveText(['Browser', 'Browser 2', 'Browser 3', 'Browser 4'])
   await expect(page.getByRole('tab', { name: 'Browser 4' })).toHaveAttribute('aria-selected', 'true')
@@ -334,7 +349,9 @@ test('the whole app: projects, sessions, terminals, layout, modes, persistence',
   await expect(page.getByRole('tab', { name: 'Agent' })).toHaveAttribute('aria-selected', 'true')
   await page.getByRole('tab', { name: 'Code' }).click()
   await expect(page.getByTestId('workspace-row')).toHaveCount(1)
-  await expect(page.getByTestId('session-tab')).toHaveCount(2)
+  await page.getByTestId('session-menu').click()
+  await expect(page.getByTestId('session-item')).toHaveCount(2)
+  await page.keyboard.press('Escape')
   // The saved layout comes back with fresh shells in each pane
   await expect(tabs(page)).toHaveCount(3)
   // Restored panes belong to their project
@@ -361,5 +378,14 @@ test('the whole app: projects, sessions, terminals, layout, modes, persistence',
   await expect(page.getByTestId('workspace-row')).toHaveCount(2)
   await expect(page.getByText('Nothing on screen in this session').locator('visible=true').first()).toBeVisible()
   await shot(page, '10-second-project')
+
+  // 14. "Continue without a project" skips naming and opens a terminal straight away
+  await page.getByTestId('add-workspace').click()
+  await page.getByTestId('new-project-dialog').getByTestId('continue-without-project').click()
+  await expect(page.getByTestId('new-project-dialog')).toBeHidden()
+  await expect(page.getByTestId('workspace-row').filter({ hasText: 'Quick sessions' })).toBeVisible()
+  await expect(tabs(page)).toHaveCount(1)
+  await expect(page.locator('.xterm-rows').locator('visible=true').first()).toContainText('PS>', { timeout: 15000 })
+  await shot(page, '11-quick-session')
   await app.close()
 })

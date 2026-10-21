@@ -79,6 +79,13 @@ describe('commandsFor', () => {
     expect(commandsFor('codex').map((c) => c.name)).toContain('permissions')
   })
 
+  it('lists all of Kiro CLI’s commands, including sub-commands', () => {
+    const kiro = commandsFor('kiro').map((c) => c.name)
+    expect(kiro.length).toBeGreaterThan(80)
+    expect(kiro).toEqual(expect.arrayContaining(['context add', 'spec new', 'tangent', 'plan', 'goal', 'workflow run', 'tools trust-all', 'chat resume']))
+    expect(new Set(kiro).size).toBe(kiro.length)
+  })
+
   it('has no built-ins for a plain shell', () => {
     expect(commandsFor(undefined)).toEqual([])
   })

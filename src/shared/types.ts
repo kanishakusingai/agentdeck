@@ -46,12 +46,21 @@ export interface AgentDef {
   label: string
   /** Executable names to look for on PATH (without extension). */
   bins: string[]
+  /** PATH folders to ignore: a same-named program there is something else (e.g. the maker's editor). */
+  notIn?: string[]
   provider?: Provider
   headless?: HeadlessSpec
   /** Whether the CLI accepts an initial prompt as its first positional arg. */
   acceptsPromptArg?: boolean
   /** Fixed args that reopen the most recent conversation in the folder. */
   resumeArgs?: string[]
+  /** For the agents directory: who makes it, one line about it, how to install it on Windows, where to read more. */
+  maker: string
+  blurb: string
+  install?: string
+  url: string
+  /** Position in the Launch menu's short list of the best-known agents (1 = first). */
+  top?: number
 }
 
 export interface DetectedAgent extends AgentDef {

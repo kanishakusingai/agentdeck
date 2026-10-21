@@ -8,7 +8,7 @@ export function Welcome() {
   const agents = useApp((s) => s.agents).filter((a) => a.installed)
   return (
     <div className="card relative flex h-full flex-col items-center justify-center overflow-hidden p-8">
-      <div aria-hidden className="pointer-events-none absolute -top-48 left-1/2 h-96 w-[720px] -translate-x-1/2 rounded-full bg-accent/15 blur-3xl" />
+      <div aria-hidden className="pointer-events-none absolute -top-48 left-1/2 h-96 w-[720px] -translate-x-1/2 rounded-full bg-accent/[0.09] blur-3xl" />
       <div className="relative flex w-full max-w-[660px] flex-col items-center text-center">
         <Logo size={44} />
         <h1 className="mt-5 text-[26px] font-semibold tracking-tight text-fg">Welcome to AgentDeck</h1>

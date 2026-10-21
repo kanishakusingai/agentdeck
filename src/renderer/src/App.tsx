@@ -15,6 +15,7 @@ import { activeSessionId, arrange, canvasFor, openTerminal, toggleZoom } from '.
 import { sessionsOf } from '@shared/types'
 import { FullScreenTerminal } from './components/code/FullScreen'
 import { NewProjectDialog, openNewProject } from './components/code/NewProject'
+import { AgentsDirectory } from './components/code/AgentsDirectory'
 import { cn } from './lib/cn'
 import { RAIL_WIDTH } from './lib/sidebar'
 import { boot, setMode, toggleRail, toggleSidebar, useApp } from './lib/store'
@@ -156,6 +157,7 @@ export function App() {
       <SettingsDialog />
       <AskHost />
       <NewProjectDialog />
+      <AgentsDirectory />
       {mode === 'code' && <FullScreenTerminal />}
       <Toasts />
     </TooltipProvider>

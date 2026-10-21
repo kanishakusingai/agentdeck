@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowRight, ExternalLink, Globe, Maximize2, RotateCw } from 'lucide-react'
+import { ArrowLeft, ArrowRight, ExternalLink, Globe, RotateCw } from 'lucide-react'
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Button, IconButton } from '../ui'
 
@@ -25,12 +25,10 @@ export function normaliseUrl(input: string): string {
 
 export function BrowserView({
   initialUrl,
-  onUrlChange,
-  onPopOut
+  onUrlChange
 }: {
   initialUrl: string
   onUrlChange?: (url: string) => void
-  onPopOut?: (url: string) => void
 }) {
   const ref = useRef<WebviewEl | null>(null)
   const [src] = useState(() => normaliseUrl(initialUrl))
@@ -99,14 +97,9 @@ export function BrowserView({
             value={address}
             onChange={(e) => setAddress(e.target.value)}
             onFocus={(e) => e.target.select()}
-            className="h-7 w-full rounded-md border border-line bg-surface pl-6 pr-2 text-xs text-fg focus:border-accent focus:outline-none"
+            className="h-7 w-full rounded-md border border-line bg-surface pl-6 pr-2 text-xs text-fg focus:border-[#6b6b75] focus:outline-none"
           />
         </div>
-        {onPopOut && (
-          <IconButton label="Open as a pane" onClick={() => onPopOut(address)}>
-            <Maximize2 size={13} />
-          </IconButton>
-        )}
         <IconButton label="Open in your browser" onClick={() => void window.api.app.openExternal(address)}>
           <ExternalLink size={13} />
         </IconButton>
