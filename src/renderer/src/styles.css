@@ -11,13 +11,13 @@
   - Status colours keep their meaning: green working, amber needs you, red error.
 */
 @theme {
-  --color-bg: #08080a;
-  --color-panel: #0e0e11;
-  --color-surface: #151518;
-  --color-raised: #1b1b1f;
-  --color-hover: #232328;
-  --color-line: #2a2a31;
-  --color-line-strong: #383840;
+  --color-bg: #050506;
+  --color-panel: #0b0b0d;
+  --color-surface: #141417;
+  --color-raised: #1c1c20;
+  --color-hover: #232327;
+  --color-line: #232327;
+  --color-line-strong: #34343a;
   --color-fg: #ededef;
   --color-fg-muted: #a1a1aa;
   --color-fg-faint: #7d7d87;
@@ -146,8 +146,8 @@ select,
   --dv-inactivegroup-hiddenpanel-tab-color: var(--color-fg-faint);
   --dv-separator-border: transparent;
   --dv-paneview-header-border-color: var(--color-line);
-  --dv-tabs-and-actions-container-height: 34px;
-  --dv-tabs-and-actions-container-font-size: 12px;
+  --dv-tabs-and-actions-container-height: 38px;
+  --dv-tabs-and-actions-container-font-size: 13px;
   --dv-drag-over-background-color: #3b82f61f;
   --dv-drag-over-border-color: #3b82f6;
   --dv-icon-hover-background-color: var(--color-hover);
@@ -171,10 +171,14 @@ select,
 }
 .dockview-theme-agentdeck .dv-tabs-and-actions-container {
   border-bottom: 1px solid var(--color-line);
-  padding-left: 4px;
+  padding-left: 6px;
 }
 .dockview-theme-agentdeck .dv-content-container {
   background: var(--color-panel);
+}
+/* One pane filling the screen: the others shrink to nothing — hide their borders too. */
+.dockview-theme-agentdeck .dv-view:not(.visible) > .dv-groupview {
+  visibility: hidden;
 }
 /* Always-rendered panes (terminals, browsers) are drawn in an overlay on top of
    their card, outside its rounded clip: round the overlay too so it doesn't
@@ -183,7 +187,8 @@ select,
   border-bottom-left-radius: 11px;
   border-bottom-right-radius: 11px;
   overflow: hidden;
-}.dockview-theme-agentdeck .dv-tab {
+}
+.dockview-theme-agentdeck .dv-tab {
   padding: 0 4px 0 8px;
 }
 /* Several panes stacked as tabs in one card: show which one is in front. */

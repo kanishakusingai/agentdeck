@@ -1,10 +1,10 @@
 import { create } from 'zustand'
-import type { AppSnapshot, RunSummary } from '@shared/api'
-import type { DetectedAgent, Mode, PtyInfo, Routine, Settings, SidebarBrowser, SidebarTab, UiState, UsageLimitEvent } from '@shared/types'
+import type { AppSnapshot } from '@shared/api'
+import type { DetectedAgent, PtyInfo, Settings, SidebarBrowser, SidebarTab, UiState, UsageLimitEvent } from '@shared/types'
 import type { PanelParams } from './canvas'
 import { addBrowser, closeBrowser, DEFAULT_BROWSERS, MAIN_BROWSER, shownAfterClose, withUrl } from './sidebar'
 
-export type PanelKind = 'terminal' | 'browser' | 'thread'
+export type PanelKind = 'terminal' | 'browser'
 
 /** A pane taken off the screen (its process keeps running); clicking it in the side panel brings it back. */
 export interface HiddenPane {
@@ -35,19 +35,13 @@ interface State {
   ptys: Record<string, PtyInfo>
   agents: DetectedAgent[]
   limits: Record<string, UsageLimitEvent>
-  runs: RunSummary[]
   panels: Record<string, PanelSummary[]>
   activePanel: { workspaceId: string; sessionId: string; panelId: string } | null
   /** Panes taken off the screen with their ×, per session: still running, listed in the side panel. */
   hidden: Record<string, HiddenPane[]>
-  /** The terminal shown large over the app (full screen), if any. */
-  zoomed: { sessionId: string; panelId: string; ptyId: string } | null
   settingsOpen: SettingsSection | null
-  selectedThreadId: string | null
-  selectedRoutineId: string | null
-  selectedRunId: string | null
-  routineDraft: Partial<Routine> | null
-  threadQuery: string
+  /** Page titles of the sidebar's browser tabs (not saved). */
+  browserTitles: Record<string, string>
   toasts: Toast[]
 }
 
@@ -57,17 +51,11 @@ export const useApp = create<State>(() => ({
   ptys: {},
   agents: [],
   limits: {},
-  runs: [],
   panels: {},
   activePanel: null,
   hidden: {},
-  zoomed: null,
   settingsOpen: null,
-  selectedThreadId: null,
-  selectedRoutineId: null,
-  selectedRunId: null,
-  routineDraft: null,
-  threadQuery: '',
+  browserTitles: {},
   toasts: []
 }))
 
@@ -86,7 +74,6 @@ function patchUi(patch: Partial<UiState>): void {
   void api().app.setUi(next)
 }
 
-export const setMode = (mode: Mode): void => patchUi({ mode })
 export const setActiveWorkspace = (activeWorkspaceId: string | undefined): void => patchUi({ activeWorkspaceId })
 export const setActiveSession = (workspaceId: string, sessionId: string): void => {
   if (ui().activeSessions?.[workspaceId] === sessionId) return
@@ -112,7 +99,14 @@ export function newSidebarBrowser(): void {
 }
 export function closeSidebarBrowser(id: string): void {
   const list = sidebarBrowsers()
+  useApp.setState((s) => {
+    const { [id]: _gone, ...browserTitles } = s.browserTitles
+    return { browserTitles }
+  })
   patchUi({ sidebarBrowsers: closeBrowser(list, id), sidebarBrowser: shownAfterClose(list, shownSidebarBrowser(), id) })
+}
+export function setBrowserTitle(id: string, title: string): void {
+  if (useApp.getState().browserTitles[id] !== title) useApp.setState((s) => ({ browserTitles: { ...s.browserTitles, [id]: title } }))
 }
 /** Remember a sidebar browser's address so it reopens there after a restart. */
 export function rememberSidebarBrowserUrl(id: string, url: string): void {
@@ -120,9 +114,10 @@ export function rememberSidebarBrowserUrl(id: string, url: string): void {
   const tab = list.find((b) => b.id === id)
   if (tab && tab.url !== url) patchUi({ sidebarBrowsers: withUrl(list, id, url) })
 }
-export function toggleSessionCollapsed(sessionId: string): void {
+/** Fold a project shut in the side panel (or open it again). */
+export function toggleProjectCollapsed(workspaceId: string): void {
   const shut = ui().collapsedSessions ?? []
-  patchUi({ collapsedSessions: shut.includes(sessionId) ? shut.filter((id) => id !== sessionId) : [...shut, sessionId] })
+  patchUi({ collapsedSessions: shut.includes(workspaceId) ? shut.filter((id) => id !== workspaceId) : [...shut, workspaceId] })
 }
 
 export async function saveSettings(patch: Partial<Settings>): Promise<void> {
@@ -154,17 +149,11 @@ export async function refreshAgents(): Promise<void> {
 
 export async function boot(): Promise<void> {
   const a = api()
-  const [snapshot, ptyList, agents, runs] = await Promise.all([
-    a.app.getSnapshot(),
-    a.pty.list(),
-    a.agents.detect(),
-    a.routines.listRuns()
-  ])
+  const [snapshot, ptyList, agents] = await Promise.all([a.app.getSnapshot(), a.pty.list(), a.agents.detect()])
   useApp.setState({
     snapshot,
     ptys: Object.fromEntries(ptyList.map((p) => [p.id, p])),
     agents,
-    runs,
     ready: true
   })
   // Keep the active workspace valid.
@@ -185,5 +174,4 @@ export async function boot(): Promise<void> {
     })
   })
   a.pty.onLimit((event) => useApp.setState((s) => ({ limits: { ...s.limits, [event.ptyId]: event } })))
-  a.routines.onRuns((list) => useApp.setState({ runs: list }))
 }

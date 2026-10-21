@@ -1,16 +1,15 @@
 import { FitAddon } from '@xterm/addon-fit'
 import { WebLinksAddon } from '@xterm/addon-web-links'
-import { Terminal, type IBufferCell, type ITheme } from '@xterm/xterm'
-import type { ScreenRow } from '@shared/terminal-screen'
+import { Terminal, type ITheme } from '@xterm/xterm'
 import { create as createStore } from 'zustand'
 import { subscribePty, writePty } from './pty-bus'
 import { useApp } from './store'
 
 export const TERMINAL_THEME: ITheme = {
-  background: '#0e0e11',
+  background: '#0b0b0d',
   foreground: '#e4e4e7',
   cursor: '#f4f4f5',
-  cursorAccent: '#0e0e11',
+  cursorAccent: '#0b0b0d',
   selectionBackground: '#ffffff2e',
   black: '#1b1b1f',
   red: '#f87171',
@@ -49,8 +48,6 @@ const visible = (chunk: string): boolean =>
 
 interface Entry extends TerminalView {
   started: boolean
-  /** The pane's own spot; the full-screen view borrows the terminal and gives it back. */
-  home?: HTMLElement
   /** Begin streaming output (once the view has its real size). */
   start: () => void
   dispose: () => void
@@ -59,73 +56,13 @@ interface Entry extends TerminalView {
 /**
  * One xterm per process, kept alive for as long as the process runs.
  *
- * Re-arranging the canvas (Tidy, presets, re-tiling, leaving full screen) remounts
+ * Re-arranging the canvas (Tidy, presets, re-tiling, moving to another session) remounts
  * the pane components. If each remount built a fresh xterm and replayed the raw
  * output, that output — drawn by ConPTY for the *old* width — would put the cursor
  * in the wrong place, and typed text would land in the middle of the prompt. So the
  * same xterm is simply moved into the new pane.
  */
 const entries = new Map<string, Entry>()
-
-type TypedListener = (ptyId: string, data: string) => void
-const typedListeners = new Set<TypedListener>()
-
-/** Called with the keys the user types straight into a terminal. */
-export function onTypedInTerminal(fn: TypedListener): () => void {
-  typedListeners.add(fn)
-  return () => typedListeners.delete(fn)
-}
-
-/** Placeholder and ghost text: dim, or drawn in a mid grey (256-colour 240–250, or an RGB grey). */
-function faint(cell: IBufferCell): boolean {
-  if (cell.isDim()) return true
-  if (cell.isFgPalette()) {
-    const c = cell.getFgColor()
-    return c >= 240 && c <= 250
-  }
-  if (cell.isFgRGB()) {
-    const c = cell.getFgColor()
-    const [r, g, b] = [(c >> 16) & 255, (c >> 8) & 255, c & 255]
-    return r === g && g === b && r >= 0x55 && r <= 0xaa
-  }
-  return false
-}
-
-/** The terminal's visible screen (the live part, not where the user has scrolled to). */
-export function screenRows(ptyId: string): { rows: ScreenRow[]; cols: number } | null {
-  const entry = entries.get(ptyId)
-  if (!entry) return null
-  const { term } = entry
-  const buffer = term.buffer.active
-  const rows: ScreenRow[] = []
-  let cell: IBufferCell | undefined
-  for (let y = 0; y < term.rows; y++) {
-    const line = buffer.getLine(buffer.baseY + y)
-    let text = ''
-    let solid = ''
-    let style = ''
-    if (line) {
-      for (let x = 0; x < term.cols; x++) {
-        cell = line.getCell(x, cell)
-        if (!cell || cell.getWidth() === 0) continue
-        const ch = cell.getChars() || ' '
-        text += ch
-        solid += faint(cell) ? ' ' : ch
-        if (!style && ch.trim()) {
-          style = `${cell.getFgColorMode()}:${cell.getFgColor()} ${cell.getBgColorMode()}:${cell.getBgColor()} ${cell.isBold() ? 'b' : ''}${cell.isInverse() ? 'i' : ''}`
-        }
-      }
-    }
-    const row = { text: text.trimEnd(), solid: solid.trimEnd(), style }
-    // A long line the terminal wrapped onto the next row is one row of the agent's screen.
-    const previous = rows[rows.length - 1]
-    if (line?.isWrapped && previous) {
-      previous.text = (previous.text.padEnd(term.cols) + row.text).trimEnd()
-      previous.solid = (previous.solid.padEnd(term.cols) + row.solid).trimEnd()
-    } else rows.push(row)
-  }
-  return { rows, cols: term.cols }
-}
 
 function create(ptyId: string): Entry {
   const term = new Terminal({
@@ -162,10 +99,7 @@ function create(ptyId: string): Entry {
     return true
   })
 
-  const input = term.onData((d) => {
-    writePty(ptyId, d)
-    typedListeners.forEach((fn) => fn(ptyId, d))
-  })
+  const input = term.onData((d) => writePty(ptyId, d))
   // Send the size once it settles: every resize makes ConPTY redraw the screen.
   let resizeTimer: ReturnType<typeof setTimeout> | undefined
   const resize = term.onResize(({ cols, rows }) => {
@@ -238,30 +172,9 @@ export function attachTerminal(ptyId: string, host: HTMLElement): TerminalView {
     entry = create(ptyId)
     entries.set(ptyId, entry)
   }
-  entry.home = host
-  // While shown full screen the terminal stays there; it comes home when that closes.
-  if (!borrowed.has(ptyId)) mount(entry, host)
+  mount(entry, host)
   if (!entry.started) entry.start()
   return entry
-}
-
-const borrowed = new Set<string>()
-
-/** Move the terminal into the full-screen view. */
-export function borrowTerminal(ptyId: string, host: HTMLElement): TerminalView | undefined {
-  const entry = entries.get(ptyId)
-  if (!entry) return undefined
-  borrowed.add(ptyId)
-  mount(entry, host)
-  entry.term.focus()
-  return entry
-}
-
-/** Give the terminal back to its pane. */
-export function returnTerminal(ptyId: string): void {
-  borrowed.delete(ptyId)
-  const entry = entries.get(ptyId)
-  if (entry?.home?.isConnected) mount(entry, entry.home)
 }
 
 export function fitTerminal(ptyId: string, host: HTMLElement): void {
@@ -274,7 +187,6 @@ export function disposeTerminal(ptyId: string): void {
   const entry = entries.get(ptyId)
   if (!entry) return
   entries.delete(ptyId)
-  borrowed.delete(ptyId)
   entry.dispose()
   useTerminalReady.setState((s) => {
     const { [ptyId]: _gone, ...rest } = s

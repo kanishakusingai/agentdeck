@@ -1,7 +1,6 @@
 // Types shared by the main process, preload and renderer.
 // Everything here must be plain data (it crosses IPC).
 
-export type Mode = 'agent' | 'code' | 'thread'
 export type Provider = 'claude' | 'codex'
 
 /** Pseudo-account id meaning "use the provider's normal login on this PC". */
@@ -37,7 +36,7 @@ export function sessionsOf(ws: Pick<Workspace, 'id' | 'sessions'>): Session[] {
 export interface HeadlessSpec {
   /** Args for a read-only headless run; the prompt is written to stdin. */
   args: string[]
-  /** Args used instead when the routine may edit files. */
+  /** Args used instead when the run may edit files. */
   editArgs: string[]
 }
 
@@ -101,6 +100,8 @@ export interface PtyCreateOptions {
   signInAccountId?: string
   /** Reopen the agent's latest conversation in this folder (layout restore). */
   resume?: boolean
+  /** The pane's name when it already has one (layout restore). */
+  title?: string
   cols: number
   rows: number
 }
@@ -138,39 +139,6 @@ export interface Thread extends ThreadSummary {
   messages: ThreadMessage[]
 }
 
-export type Schedule =
-  | { kind: 'interval'; minutes: number }
-  | { kind: 'daily'; time: string; days: number[] }
-
-export interface Routine {
-  id: string
-  name: string
-  prompt: string
-  workspaceId: string
-  agentId: string
-  accountId?: string
-  schedule: Schedule
-  allowEdits: boolean
-  enabled: boolean
-  createdAt: number
-  lastRunAt?: number
-  nextRunAt?: number
-}
-
-export type RunStatus = 'running' | 'success' | 'failed'
-
-export interface RoutineRun {
-  id: string
-  routineId: string
-  routineName: string
-  startedAt: number
-  endedAt?: number
-  status: RunStatus
-  exitCode?: number
-  output: string
-  trigger: 'schedule' | 'manual'
-}
-
 export type ShellKind = 'powershell' | 'pwsh' | 'cmd' | 'bash'
 
 export interface Settings {
@@ -196,11 +164,10 @@ export interface SidebarBrowser {
 }
 
 export interface UiState {
-  mode: Mode
   activeWorkspaceId?: string
-  /** Left rail (workspaces / routines / threads list). */
+  /** Left rail (workspaces and their sessions). */
   railOpen: boolean
-  /** Right sidebar (dashboard / browser) in Code mode. */
+  /** Right sidebar (dashboard / browser). */
   sidebarOpen: boolean
   sidebarTab: SidebarTab
   /** Width of the right sidebar in px (dragged by its left edge). */
@@ -208,7 +175,7 @@ export interface UiState {
   /** The sidebar's browser tabs, and which one is shown. */
   sidebarBrowsers?: SidebarBrowser[]
   sidebarBrowser?: string
-  /** Sessions folded shut in the left rail. */
+  /** Projects folded shut in the left rail. */
   collapsedSessions?: string[]
   /** The session shown for each project (workspace id → session id). */
   activeSessions?: Record<string, string>
@@ -219,8 +186,6 @@ export interface AppData {
   layouts: Record<string, unknown>
   accounts: Account[]
   defaults: Partial<Record<Provider, string>>
-  routines: Routine[]
-  runs: RoutineRun[]
   settings: Settings
   ui: UiState
 }
@@ -236,7 +201,6 @@ export const DEFAULT_SETTINGS: Settings = {
 }
 
 export const DEFAULT_UI: UiState = {
-  mode: 'code',
   railOpen: true,
   sidebarOpen: true,
   sidebarTab: 'dashboard'
@@ -248,8 +212,6 @@ export function emptyAppData(): AppData {
     layouts: {},
     accounts: [],
     defaults: {},
-    routines: [],
-    runs: [],
     settings: { ...DEFAULT_SETTINGS },
     ui: { ...DEFAULT_UI }
   }

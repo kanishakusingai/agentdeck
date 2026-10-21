@@ -1,7 +1,7 @@
 import type { AddPanelPositionOptions, DockviewApi, IDockviewPanel } from 'dockview-react'
 import { MAX_PANES_PER_SESSION, sessionsOf, type PtyCreateOptions, type PtyInfo } from '@shared/types'
 import { buildGridLayout, isEvenGrid, planAdd, type GridShape, type PanelState } from './layout'
-import { errorText, setActiveSession, setActiveWorkspace, setMode, toast, useApp, type HiddenPane, type PanelKind, type PanelSummary } from './store'
+import { errorText, setActiveSession, setActiveWorkspace, toast, useApp, type HiddenPane, type PanelKind, type PanelSummary } from './store'
 
 /*
  * Every project (workspace) has one or more sessions; every session is its own canvas
@@ -17,7 +17,6 @@ export interface PanelParams {
   agentId?: string
   accountId?: string
   url?: string
-  threadId?: string
 }
 
 /** What is saved per session: the grid, plus panes taken off the screen (still running). */
@@ -52,7 +51,6 @@ export function activeSessionId(workspaceId: string): string {
 export function showSession(sessionId: string): void {
   const workspaceId = workspaceOfSession(sessionId)
   if (!workspaceId) return
-  setMode('code')
   setActiveWorkspace(workspaceId)
   setActiveSession(workspaceId, sessionId)
 }
@@ -118,7 +116,6 @@ export function registerCanvas(sessionId: string, api: DockviewApi): () => void 
     api.onDidRemovePanel((panel) => {
       publish(sessionId)
       const params = paramsOf(panel)
-      if (useApp.getState().zoomed?.panelId === panel.id) useApp.setState({ zoomed: null })
       if (rearranging) return
       if (params.kind === 'terminal' && params.ptyId) void window.api.pty.dispose(params.ptyId)
       retileAfterRemove(sessionId, api, even, saveNow)
@@ -264,23 +261,6 @@ export function openPtyBeside(existingPtyId: string, info: PtyInfo): void {
   addTerminalPanel(api, info, found ? { referencePanel: found.panel.id, direction: 'right' } : placement(api))
 }
 
-export async function openThreadPane(workspaceId: string, threadId: string, title: string): Promise<void> {
-  const sessionId = activeSessionId(workspaceId)
-  showSession(sessionId)
-  const api = await whenCanvas(sessionId)
-  const existing = api.panels.find((p) => paramsOf(p).threadId === threadId)
-  if (existing) return existing.api.setActive()
-  if (!hasRoom(sessionId)) return
-  const params: PanelParams = { kind: 'thread', workspaceId, threadId }
-  api.addPanel({
-    id: `thread-${crypto.randomUUID()}`,
-    component: 'thread',
-    title: title.length > 28 ? `${title.slice(0, 28)}…` : title,
-    params: params as unknown as Record<string, unknown>,
-    position: placement(api, 'right')
-  })
-}
-
 // ---------- finding and focusing ----------
 
 function findPtyPanel(ptyId: string): { sessionId: string; panel: IDockviewPanel } | undefined {
@@ -337,7 +317,7 @@ function addPaneFromParams(api: DockviewApi, pane: HiddenPane, position: AddPane
     component: pane.params.kind ?? 'terminal',
     title: pane.title,
     params: pane.params as unknown as Record<string, unknown>,
-    renderer: pane.params.kind === 'thread' ? undefined : 'always',
+    renderer: 'always',
     position
   })
 }
@@ -435,7 +415,7 @@ export function arrange(sessionId: string, tiles?: number): void {
       contentComponent: params.kind ?? 'terminal',
       title: p.api.title ?? '',
       params: params as unknown as Record<string, unknown>,
-      renderer: params.kind === 'thread' ? undefined : 'always'
+      renderer: 'always'
     }
   })
   rearranging++
@@ -477,22 +457,21 @@ export function disposeSession(sessionId: string): void {
   }
 }
 
-// ---------- full screen ----------
+// ---------- one pane filling the screen ----------
 
-/** Show a terminal pane large over the app (again to go back). */
-export function toggleZoom(sessionId: string, panelId?: string): void {
-  if (useApp.getState().zoomed) return useApp.setState({ zoomed: null })
+/** Let one pane fill the whole canvas (the others keep running behind it); again to go back. */
+export function toggleMaximize(sessionId: string, panelId?: string): void {
   const api = canvases.get(sessionId)
-  const panel = panelId ? api?.getPanel(panelId) : api?.activePanel
-  const params = panel ? paramsOf(panel) : undefined
-  if (!panel || params?.kind !== 'terminal' || !params.ptyId) return
+  if (!api) return
+  if (api.hasMaximizedGroup()) return api.exitMaximizedGroup()
+  const panel = panelId ? api.getPanel(panelId) : api.activePanel
+  if (!panel) return
   panel.api.setActive()
-  useApp.setState({ zoomed: { sessionId, panelId: panel.id, ptyId: params.ptyId } })
+  api.maximizeGroup(panel)
 }
 
 export function activeTerminalPtyId(): string | undefined {
-  const { activePanel, snapshot: snap, zoomed } = useApp.getState()
-  if (zoomed) return zoomed.ptyId
+  const { activePanel, snapshot: snap } = useApp.getState()
   const wsId = activePanel?.workspaceId ?? snap?.ui.activeWorkspaceId
   const sessionId = activePanel?.sessionId ?? (wsId ? activeSessionId(wsId) : undefined)
   const panel = sessionId ? canvases.get(sessionId)?.activePanel : undefined

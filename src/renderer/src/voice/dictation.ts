@@ -135,15 +135,6 @@ export function toggleRecording(): void {
 
 // ---------- inserting text where the user is working ----------
 
-/** Registered by the active pane's message box so dictation has a fallback target. */
-let composerInsert: ((text: string) => void) | null = null
-export function registerComposer(fn: (text: string) => void): () => void {
-  composerInsert = fn
-  return () => {
-    if (composerInsert === fn) composerInsert = null
-  }
-}
-
 function insertIntoField(el: HTMLInputElement | HTMLTextAreaElement, text: string): void {
   const start = el.selectionStart ?? el.value.length
   const end = el.selectionEnd ?? el.value.length
@@ -160,7 +151,7 @@ function insertIntoField(el: HTMLInputElement | HTMLTextAreaElement, text: strin
 }
 
 export function insertText(text: string, el: Element | null): void {
-  // A real text field (a pane's message box included) gets the text; xterm's hidden input does not.
+  // A real text field gets the text; xterm's hidden input does not (the terminal does).
   const isXterm = el instanceof HTMLElement && el.classList.contains('xterm-helper-textarea')
   if (!isXterm && (el instanceof HTMLTextAreaElement || (el instanceof HTMLInputElement && /^(text|search|url|)$/.test(el.type)))) {
     insertIntoField(el, text)
@@ -171,7 +162,6 @@ export function insertText(text: string, el: Element | null): void {
     writePty(pane.getAttribute('data-pty-id')!, text)
     return
   }
-  if (composerInsert) return composerInsert(text)
   const ptyId = activeTerminalPtyId()
   if (ptyId) return writePty(ptyId, text)
   void navigator.clipboard.writeText(text)

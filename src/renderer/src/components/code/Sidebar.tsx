@@ -1,13 +1,13 @@
-import { Globe, LayoutDashboard, Plus, X } from 'lucide-react'
-import { useEffect, useRef, type KeyboardEvent } from 'react'
+import { Globe, LayoutDashboard, Maximize2, Minimize2, Plus, X } from 'lucide-react'
+import { useCallback, useEffect, useRef, type KeyboardEvent } from 'react'
 import { agentById } from '@shared/agents'
 import type { PtyInfo } from '@shared/types'
 import { accountName } from '../../lib/accounts'
 import { tracker, useActivityClock, type Activity } from '../../lib/activity'
 import { focusPty } from '../../lib/canvas'
 import { cn } from '../../lib/cn'
-import { browserLabel, DEFAULT_BROWSERS, MAIN_BROWSER } from '../../lib/sidebar'
-import { closeSidebarBrowser, newSidebarBrowser, rememberSidebarBrowserUrl, setSidebarTab, showSidebarBrowser, shownSidebarBrowser, useApp } from '../../lib/store'
+import { browserLabel, DEFAULT_BROWSERS, MAIN_BROWSER, maxSidebarWidth, SIDEBAR_WIDTH } from '../../lib/sidebar'
+import { closeSidebarBrowser, newSidebarBrowser, rememberSidebarBrowserUrl, setBrowserTitle, setSidebarTab, setSidebarWidth, showSidebarBrowser, shownSidebarBrowser, useApp } from '../../lib/store'
 import { ActivityDot, activityLabel, activityText, AgentIcon, Tip } from '../ui'
 import { BrowserView } from './BrowserView'
 
@@ -101,7 +101,7 @@ function Dashboard({ rows }: { rows: { info: PtyInfo; activity: Activity }[] }) 
 }
 
 const tabClass = (on: boolean): string =>
-  cn('flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors', on ? 'bg-hover text-fg' : 'text-fg-faint hover:text-fg')
+  cn('flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2 text-[13px] font-medium transition-colors', on ? 'bg-hover text-fg' : 'text-fg-muted hover:text-fg')
 
 /** ←/→/Home/End move between the tabs (only the selected tab is in the Tab order). */
 function onTabListKey(e: KeyboardEvent<HTMLDivElement>): void {
@@ -115,17 +115,54 @@ function onTabListKey(e: KeyboardEvent<HTMLDivElement>): void {
   tabs[next].click()
 }
 
+/** One browser in the sidebar, kept mounted so its page doesn't reload when another tab is shown. */
+function SidebarBrowserView({ id, url, shown }: { id: string; url: string; shown: boolean }) {
+  const onUrlChange = useCallback((next: string) => rememberSidebarBrowserUrl(id, next), [id])
+  const onTitleChange = useCallback((title: string) => setBrowserTitle(id, title), [id])
+  return (
+    <div className={cn('absolute inset-0', !shown && 'invisible')}>
+      <BrowserView initialUrl={url} onUrlChange={onUrlChange} onTitleChange={onTitleChange} />
+    </div>
+  )
+}
+
+/** The sidebar's ⤢: as wide as the window allows, and back. */
+function ExpandButton() {
+  const width = useApp((s) => s.snapshot!.ui.sidebarWidth ?? SIDEBAR_WIDTH.default)
+  const railOpen = useApp((s) => s.snapshot!.ui.railOpen !== false)
+  const before = useRef<number>(SIDEBAR_WIDTH.default)
+  const max = maxSidebarWidth(window.innerWidth, railOpen)
+  const wide = width >= max - 1
+  const toggle = (): void => {
+    if (wide) return setSidebarWidth(before.current < max - 1 ? before.current : SIDEBAR_WIDTH.default)
+    before.current = width
+    setSidebarWidth(max)
+  }
+  const label = wide ? 'Make the sidebar narrower' : 'Make the sidebar as wide as possible'
+  return (
+    <Tip label={label}>
+      <button aria-label={label} onClick={toggle} className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-fg-faint transition-colors hover:bg-hover hover:text-fg" data-testid="sidebar-expand">
+        {wide ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+      </button>
+    </Tip>
+  )
+}
+
 export function Sidebar() {
   const tab = useApp((s) => s.snapshot!.ui.sidebarTab)
   const home = useApp((s) => s.snapshot!.settings.browserHomeUrl)
   const browsers = useApp((s) => s.snapshot!.ui.sidebarBrowsers) ?? DEFAULT_BROWSERS
   const shown = useApp((s) => shownSidebarBrowser(s.snapshot!.ui))
+  const titles = useApp((s) => s.browserTitles)
   const ptyMap = useApp((s) => s.ptys)
+  const panels = useApp((s) => s.panels)
   const now = useActivityClock()
+  // A pane's name is the one in its header (agents have a person's name, and panes can be renamed).
+  const paneTitles = new Map(Object.values(panels).flatMap((list) => list.flatMap((p) => (p.ptyId ? [[p.ptyId, p.title] as const] : []))))
   const rows = Object.values(ptyMap)
     .sort((a, b) => a.startedAt - b.startedAt)
-    .map((info) => ({ info, activity: tracker.activity(info, now) }))
-  const needs = rows.filter((r) => r.activity === 'needs').length
+    .map((info) => ({ info: { ...info, title: paneTitles.get(info.id) || info.title }, activity: tracker.activity(info, now) }))
+  const running = rows.filter((r) => r.info.status !== 'exited').length
   const tabList = useRef<HTMLDivElement>(null)
   // When there are more tabs than fit, keep the one on screen scrolled into view.
   useEffect(() => {
@@ -136,42 +173,51 @@ export function Sidebar() {
   return (
     <aside aria-label="Sidebar" className="flex h-full flex-col">
       <div className="flex h-11 shrink-0 items-center gap-1 border-b border-line pl-2 pr-1.5">
-        <div ref={tabList} role="tablist" aria-label="Sidebar" onKeyDown={onTabListKey} className="no-scrollbar flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
+        <div ref={tabList} role="tablist" aria-label="Sidebar" onKeyDown={onTabListKey} className="no-scrollbar flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto">
           <button role="tab" aria-selected={tab === 'dashboard'} tabIndex={tab === 'dashboard' ? 0 : -1} onClick={() => setSidebarTab('dashboard')} className={tabClass(tab === 'dashboard')}>
-            <LayoutDashboard size={13} /> Dashboard
-            {needs > 0 && <span className="tabular rounded bg-warn/15 px-1 text-2xs text-warn">{needs}</span>}
+            <LayoutDashboard size={14} /> Dashboard
+            {running > 0 && (
+              <span className="tabular rounded-[5px] bg-accent/20 px-1.5 text-2xs font-semibold text-accent-strong" data-testid="dashboard-count">
+                {running}
+              </span>
+            )}
           </button>
           {browsers.map((b) => {
             const on = tab === 'browser' && shown === b.id
-            const label = browserLabel(b)
+            const name = browserLabel(b)
+            const title = titles[b.id]
             const closable = b.id !== MAIN_BROWSER
             return (
               <div key={b.id} role="presentation" className={cn(tabClass(on), 'group', closable && 'pr-1')}>
                 <button
                   role="tab"
                   aria-selected={on}
+                  aria-label={name}
                   tabIndex={on ? 0 : -1}
                   aria-keyshortcuts={closable ? 'Delete' : undefined}
                   onClick={() => showSidebarBrowser(b.id)}
                   onKeyDown={(e) => {
                     if (closable && e.key === 'Delete') closeSidebarBrowser(b.id)
                   }}
-                  className="flex items-center gap-1.5"
+                  title={title ? `${title} (${name})` : name}
+                  className="flex min-w-0 items-center gap-1.5"
                   data-testid="sidebar-browser-tab"
+                  data-name={name}
                 >
-                  <Globe size={13} /> {label}
+                  {on ? <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-fg" aria-hidden /> : <Globe size={13} className="shrink-0" />}
+                  <span className="max-w-[150px] truncate">{title || name}</span>
                 </button>
                 {closable && (
                   // Mouse shortcut only — keyboard and screen-reader users close a tab with Delete.
                   <button
                     aria-hidden
                     tabIndex={-1}
-                    title={`Close ${label}`}
+                    title={`Close ${name}`}
                     onClick={() => closeSidebarBrowser(b.id)}
                     className={cn('rounded p-0.5 text-fg-faint hover:bg-raised hover:text-fg group-hover:opacity-100', on ? 'opacity-100' : 'opacity-0')}
                     data-testid="sidebar-browser-close"
                   >
-                    <X size={11} />
+                    <X size={12} />
                   </button>
                 )}
               </div>
@@ -180,19 +226,14 @@ export function Sidebar() {
         </div>
         <Tip label="New browser tab">
           <button aria-label="New browser tab" onClick={newSidebarBrowser} className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-fg-faint transition-colors hover:bg-hover hover:text-fg" data-testid="sidebar-add">
-            <Plus size={14} />
+            <Plus size={15} />
           </button>
         </Tip>
+        <ExpandButton />
       </div>
       <div className="relative min-h-0 flex-1">
-        {/* Keep every browser mounted so pages don't reload when switching tabs. */}
         {browsers.map((b) => (
-          <div key={b.id} className={cn('absolute inset-0', (tab !== 'browser' || shown !== b.id) && 'invisible')}>
-            <BrowserView
-              initialUrl={b.url ?? home}
-              onUrlChange={(url) => rememberSidebarBrowserUrl(b.id, url)}
-            />
-          </div>
+          <SidebarBrowserView key={b.id} id={b.id} url={b.url ?? home} shown={tab === 'browser' && shown === b.id} />
         ))}
         {tab === 'dashboard' && (
           <div className="absolute inset-0 bg-panel">

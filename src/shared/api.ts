@@ -6,19 +6,13 @@ import type {
   PtyCreateOptions,
   PtyInfo,
   Session,
-  Routine,
-  RoutineRun,
   Settings,
-  Thread,
-  ThreadSummary,
   UiState,
   UsageLimitEvent
 } from './types'
 
 /** What the renderer sees of the app's saved data (big collections load separately). */
-export type AppSnapshot = Omit<AppData, 'runs' | 'layouts'>
-
-export type RunSummary = Omit<RoutineRun, 'output'> & { preview: string }
+export type AppSnapshot = Omit<AppData, 'layouts'>
 
 export interface PtySnapshot {
   data: string
@@ -58,21 +52,10 @@ ame (null = the user cancelled). */
   'accounts:remove': (id: string) => void
   'accounts:setDefault': (provider: Provider, accountId: string | null) => void
   'accounts:reveal': (id: string) => void
-  'threads:list': () => ThreadSummary[]
-  'threads:get': (id: string) => Thread | null
-  'threads:forPty': (ptyId: string) => ThreadSummary | null
-  'threads:search': (query: string) => string[]
-  'routines:save': (routine: Routine) => void
-  'routines:remove': (id: string) => void
-  'routines:runNow': (id: string) => void
-  'routines:listRuns': () => RunSummary[]
-  'routines:getRun': (id: string) => RoutineRun | null
   'limits:continueOnAccount': (ptyId: string, accountId: string, cols: number, rows: number) => PtyInfo
   'limits:resumeLater': (ptyId: string) => void
   'limits:dismiss': (ptyId: string) => void
   'voice:enhance': (text: string) => string
-  /** Files and folders of a workspace for the @ picker (folders end with "/"). */
-  'composer:files': (workspaceId: string) => string[]
 }
 
 /** Fire-and-forget channels (renderer → main). */
@@ -87,7 +70,6 @@ export interface EventChannels {
   'pty:data': (id: string, chunk: string, end: number) => void
   'pty:info': (list: PtyInfo[]) => void
   'pty:limit': (event: UsageLimitEvent) => void
-  'routines:runs': (runs: RunSummary[]) => void
 }
 
 type Invoke<C extends keyof InvokeChannels> = (...args: Parameters<InvokeChannels[C]>) => Promise<ReturnType<InvokeChannels[C]>>
@@ -138,20 +120,6 @@ export interface AgentDeckApi {
     setDefault: Invoke<'accounts:setDefault'>
     reveal: Invoke<'accounts:reveal'>
   }
-  threads: {
-    list: Invoke<'threads:list'>
-    get: Invoke<'threads:get'>
-    forPty: Invoke<'threads:forPty'>
-    search: Invoke<'threads:search'>
-  }
-  routines: {
-    save: Invoke<'routines:save'>
-    remove: Invoke<'routines:remove'>
-    runNow: Invoke<'routines:runNow'>
-    listRuns: Invoke<'routines:listRuns'>
-    getRun: Invoke<'routines:getRun'>
-    onRuns: On<'routines:runs'>
-  }
   limits: {
     continueOnAccount: Invoke<'limits:continueOnAccount'>
     resumeLater: Invoke<'limits:resumeLater'>
@@ -159,8 +127,5 @@ export interface AgentDeckApi {
   }
   voice: {
     enhance: Invoke<'voice:enhance'>
-  }
-  composer: {
-    files: Invoke<'composer:files'>
   }
 }

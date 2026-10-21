@@ -2,7 +2,7 @@ import { randomUUID } from 'crypto'
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'fs'
 import { homedir } from 'os'
 import { basename, join, resolve } from 'path'
-import type { AppSnapshot, PtySnapshot, RunSummary } from '@shared/api'
+import type { AppSnapshot, PtySnapshot } from '@shared/api'
 import { accountLabel } from '@shared/accounts'
 import { agentById, PROVIDERS } from '@shared/agents'
 import {
@@ -13,8 +13,6 @@ import {
   type Provider,
   type PtyCreateOptions,
   type PtyInfo,
-  type Routine,
-  type RoutineRun,
   type Settings,
   type Thread,
   type ThreadSummary,
@@ -24,19 +22,17 @@ import {
 import { accountEnv, resolveAccount } from './accounts'
 import { detectAgents } from './agents'
 import { asPastedMessage } from '@shared/paste'
-import { listWorkspaceFiles } from './composer-sources'
 import { buildHandoffSummary, handoffPrompt } from './handoff'
 import { ENHANCE_INSTRUCTION, runHeadless } from './headless'
 import { buildShellLaunch } from './launch'
+import { paneTitle } from '@shared/pane-names'
 import { PtyManager } from './pty-manager'
-import { nextRun, Scheduler } from './schedule'
 import { JsonStore } from './store'
-import { listThreads, readThread, searchThreads, type ThreadIndexEntry, type TranscriptRoot } from './transcripts'
+import { listThreads, readThread, type ThreadIndexEntry, type TranscriptRoot } from './transcripts'
 import { detectUsageLimit, stripAnsi } from './usage-limit'
 
 type Send = (channel: string, ...args: unknown[]) => void
 
-const MAX_RUNS = 200
 const samePath = (a: string, b: string): boolean =>
   resolve(a).replace(/[\\/]+$/, '').toLowerCase() === resolve(b).replace(/[\\/]+$/, '').toLowerCase()
 
@@ -44,7 +40,6 @@ const samePath = (a: string, b: string): boolean =>
 export class AppCore {
   readonly store: JsonStore
   readonly ptys = new PtyManager()
-  readonly scheduler: Scheduler
   private readonly infos = new Map<string, PtyInfo>()
   private readonly limitTails = new Map<string, string>()
   private readonly limitMutedUntil = new Map<string, number>()
@@ -68,25 +63,12 @@ export class AppCore {
         this.broadcastPtys()
       }
     })
-    this.scheduler = new Scheduler({
-      getRoutines: () => this.store.get('routines'),
-      saveRoutines: (routines) => {
-        this.store.set('routines', routines)
-        this.broadcast()
-      },
-      saveRun: (run) => this.saveRun(run),
-      execute: (routine, onOutput) => this.executeRoutine(routine, onOutput)
-    })
-    // Runs that were mid-flight when the app closed can't be resumed.
-    this.store.update('runs', (runs) =>
-      runs.map((r) => (r.status === 'running' ? { ...r, status: 'failed', output: `${r.output}\n[AgentDeck closed during this run]` } : r))
-    )
   }
 
   // ---------- snapshot ----------
 
   snapshot(): AppSnapshot {
-    const { runs: _runs, layouts: _layouts, ...rest } = this.store.snapshot()
+    const { layouts: _layouts, ...rest } = this.store.snapshot()
     return rest
   }
 
@@ -157,7 +139,6 @@ export class AppCore {
     for (const info of [...this.infos.values()]) if (info.workspaceId === id) this.disposePty(info.id)
     this.store.update('workspaces', (list) => list.filter((w) => w.id !== id))
     this.store.update('layouts', (layouts) => Object.fromEntries(Object.entries(layouts).filter(([key]) => !this.isSessionOf(key, id))))
-    this.store.update('routines', (list) => list.map((r) => (r.workspaceId === id ? { ...r, enabled: false } : r)))
     this.broadcast()
   }
 
@@ -176,21 +157,6 @@ export class AppCore {
 
   workspace(id: string): Workspace | undefined {
     return this.store.get('workspaces').find((w) => w.id === id)
-  }
-
-  // ---------- message box suggestions ----------
-
-  private fileCache = new Map<string, { at: number; files: Promise<string[]> }>()
-
-  /** Workspace files for the @ picker, re-read at most every 15 seconds. */
-  workspaceFiles(workspaceId: string): Promise<string[]> {
-    const ws = this.workspace(workspaceId)
-    if (!ws || !existsSync(ws.path)) return Promise.resolve([])
-    const hit = this.fileCache.get(ws.path)
-    if (hit && Date.now() - hit.at < 15_000) return hit.files
-    const files = listWorkspaceFiles(ws.path)
-    this.fileCache.set(ws.path, { at: Date.now(), files })
-    return files
   }
 
   // ---------- agents ----------
@@ -304,13 +270,9 @@ export class AppCore {
       if (opts.resume && agent.resumeArgs) commandArgs = agent.resumeArgs
       title = agent.label
     }
-    // "Terminal", "Terminal 2", … so panes are easy to tell apart.
-    const taken = new Set([...this.infos.values()].filter((i) => i.workspaceId === opts.workspaceId).map((i) => i.title))
-    if (taken.has(title)) {
-      let n = 2
-      while (taken.has(`${title} ${n}`)) n++
-      title = `${title} ${n}`
-    }
+    // Agents get a person's name, terminals are numbered ("Terminal 2"), so panes are easy to tell apart.
+    const taken = [...this.infos.values()].filter((i) => i.workspaceId === opts.workspaceId).map((i) => i.title)
+    title = paneTitle({ base: title, agent: Boolean(agent) && !opts.signInAccountId, taken, wanted: opts.title })
 
     // Only the detected executable path and fixed, app-defined arguments reach the shell.
     const launch = buildShellLaunch({ shell: settings.shell, command: agent?.path, commandArgs, fullPathPrompt: settings.fullPathPrompt !== false })
@@ -461,7 +423,7 @@ export class AppCore {
     this.broadcastPtys()
   }
 
-  // ---------- threads ----------
+  // ---------- conversations (read from the agents' own transcripts, for handoffs) ----------
 
   private transcriptRoots(): TranscriptRoot[] {
     const roots: TranscriptRoot[] = (Object.keys(PROVIDERS) as Provider[]).map((p) => ({
@@ -473,26 +435,20 @@ export class AppCore {
     return roots
   }
 
-  /** Ids of threads whose conversation text contains the query. */
-  searchThreads(query: string): string[] {
-    if (this.threadIndex.size === 0) this.listThreads()
-    return searchThreads([...this.threadIndex.values()], query)
-  }
-
-  listThreads(): ThreadSummary[] {
+  private listThreads(): ThreadSummary[] {
     const entries = listThreads(this.transcriptRoots())
     this.threadIndex.clear()
     for (const e of entries) this.threadIndex.set(e.id, e)
     return entries.map(({ file: _file, ...summary }) => summary)
   }
 
-  getThread(id: string): Thread | null {
+  private getThread(id: string): Thread | null {
     if (!this.threadIndex.has(id)) this.listThreads()
     const entry = this.threadIndex.get(id)
     return entry ? readThread(entry) : null
   }
 
-  threadForPty(ptyId: string): ThreadSummary | null {
+  private threadForPty(ptyId: string): ThreadSummary | null {
     const info = this.infos.get(ptyId)
     const provider = agentById(info?.agentId)?.provider
     if (!info || !provider) return null
@@ -506,70 +462,6 @@ export class AppCore {
           t.updatedAt >= info.startedAt - 60000
       ) ?? null
     )
-  }
-
-  // ---------- routines ----------
-
-  saveRoutine(routine: Routine): void {
-    const now = new Date()
-    const list = this.store.get('routines')
-    const previous = list.find((r) => r.id === routine.id)
-    const scheduleChanged = !previous || JSON.stringify(previous.schedule) !== JSON.stringify(routine.schedule)
-    const next: Routine = {
-      ...routine,
-      nextRunAt: scheduleChanged || !routine.nextRunAt ? nextRun(routine.schedule, now) : routine.nextRunAt
-    }
-    this.store.set('routines', previous ? list.map((r) => (r.id === next.id ? next : r)) : [...list, next])
-    this.broadcast()
-  }
-
-  removeRoutine(id: string): void {
-    this.store.update('routines', (list) => list.filter((r) => r.id !== id))
-    this.store.update('runs', (runs) => runs.filter((r) => r.routineId !== id))
-    this.broadcast()
-    this.broadcastRuns()
-  }
-
-  runRoutineNow(id: string): void {
-    void this.scheduler.runNow(id)
-  }
-
-  listRuns(): RunSummary[] {
-    return this.store.get('runs').map(({ output, ...rest }) => ({ ...rest, preview: output.slice(-400) }))
-  }
-
-  getRun(id: string): RoutineRun | null {
-    return this.store.get('runs').find((r) => r.id === id) ?? null
-  }
-
-  private saveRun(run: RoutineRun): void {
-    // A run that finishes after its routine was deleted is dropped, not resurrected.
-    if (!this.store.get('routines').some((r) => r.id === run.routineId)) return
-    this.store.update('runs', (runs) => {
-      const without = runs.filter((r) => r.id !== run.id)
-      return [run, ...without].sort((a, b) => b.startedAt - a.startedAt).slice(0, MAX_RUNS)
-    })
-    this.broadcastRuns()
-  }
-
-  private broadcastRuns(): void {
-    this.send('routines:runs', this.listRuns())
-  }
-
-  private executeRoutine(routine: Routine, onOutput: (chunk: string) => void): Promise<{ exitCode: number; output: string }> {
-    const workspace = this.workspace(routine.workspaceId)
-    if (!workspace) return Promise.resolve({ exitCode: 1, output: 'The workspace for this routine was removed.' })
-    const agent = this.agent(routine.agentId)
-    if (!agent) return Promise.resolve({ exitCode: 1, output: 'Unknown agent.' })
-    const accountId = agent.provider ? this.resolveFor(agent.provider, workspace, routine.accountId) : undefined
-    return runHeadless({
-      agent,
-      cwd: workspace.path,
-      env: accountEnv(this.account(accountId)),
-      prompt: routine.prompt,
-      allowEdits: routine.allowEdits,
-      onOutput
-    }).catch((err: Error) => ({ exitCode: 1, output: err.message }))
   }
 
   // ---------- voice ----------
@@ -594,13 +486,7 @@ export class AppCore {
 
   // ---------- lifecycle ----------
 
-  start(): void {
-    this.scheduler.normalise()
-    this.scheduler.start()
-  }
-
   shutdown(): void {
-    this.scheduler.stop()
     for (const t of this.resumeTimers.values()) clearTimeout(t)
     this.ptys.disposeAll()
     this.store.flush()

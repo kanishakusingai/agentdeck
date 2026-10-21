@@ -5,10 +5,8 @@ import { setPanelPty, type PanelParams } from '../../lib/canvas'
 import { errorText, toast, useApp } from '../../lib/store'
 import { attachTerminal, fitTerminal, setTerminalFontSize, useTerminalReady } from '../../lib/terminals'
 import { agentById } from '@shared/agents'
-import { Maximize2 } from 'lucide-react'
 import { AgentIcon } from '../ui'
 import { LimitBanner } from './LimitBanner'
-import { PaneComposer, type PaneComposerHandle } from './PaneComposer'
 
 export function TerminalPanel(props: IDockviewPanelProps) {
   const params = props.params as unknown as PanelParams
@@ -19,14 +17,7 @@ export function TerminalPanel(props: IDockviewPanelProps) {
   const host = useRef<HTMLDivElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
   const termRef = useRef<Terminal | null>(null)
-  const composerRef = useRef<PaneComposerHandle>(null)
   const creating = useRef(false)
-  const [active, setActive] = useState(props.api.isActive)
-
-  useEffect(() => {
-    const sub = props.api.onDidActiveChange((e) => setActive(e.isActive))
-    return () => sub.dispose()
-  }, [props.api])
 
   // Follow parameter changes (e.g. the pane moved to another account).
   useEffect(() => {
@@ -48,6 +39,8 @@ export function TerminalPanel(props: IDockviewPanelProps) {
         agentId: agent?.id,
         accountId: agent ? current.accountId : undefined,
         resume: Boolean(agent),
+        // Keep the pane's name (a person's name for agents, or what the user renamed it to).
+        title: props.api.title,
         cols: 100,
         rows: 30
       })
@@ -69,15 +62,14 @@ export function TerminalPanel(props: IDockviewPanelProps) {
     termRef.current = view.term
     const observer = new ResizeObserver(() => fitTerminal(ptyId, el))
     observer.observe(el)
-    // A pane that becomes active (new pane, keyboard, rail click) puts the cursor in its message box,
-    // unless the user clicked straight into the terminal.
-    const focusBox = (): void => {
+    // A pane that becomes active (new pane, keyboard, side panel click) puts the cursor in its terminal.
+    const focusTerm = (): void => {
       requestAnimationFrame(() => {
-        if (!panelRef.current?.contains(document.activeElement)) composerRef.current?.focus()
+        if (!panelRef.current?.contains(document.activeElement)) view.term.focus()
       })
     }
-    const focus = props.api.onDidActiveChange((e) => e.isActive && focusBox())
-    if (props.api.isActive) focusBox()
+    const focus = props.api.onDidActiveChange((e) => e.isActive && focusTerm())
+    if (props.api.isActive) focusTerm()
     return () => {
       observer.disconnect()
       focus.dispose()
@@ -88,28 +80,14 @@ export function TerminalPanel(props: IDockviewPanelProps) {
   useEffect(() => setTerminalFontSize(fontSize), [fontSize])
 
   const ready = useTerminalReady((s) => (ptyId ? Boolean(s[ptyId]) : false))
-  const fullScreen = useApp((s) => Boolean(ptyId) && s.zoomed?.ptyId === ptyId)
 
   return (
     <div ref={panelRef} className="flex h-full min-h-0 flex-col bg-panel" data-pty-id={ptyId}>
       {ptyId && <LimitBanner ptyId={ptyId} />}
       <div className="relative min-h-0 flex-1">
         <div ref={host} className="absolute inset-0 overflow-hidden" onMouseDown={() => termRef.current?.focus()} />
-        {!ready && !fullScreen && <Starting agentId={info?.agentId ?? params.agentId} />}
-        {fullScreen && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-xs text-fg-faint">
-            <Maximize2 size={16} />
-            Shown in full screen
-          </div>
-        )}
+        {!ready && <Starting agentId={info?.agentId ?? params.agentId} />}
       </div>
-      <PaneComposer
-        ref={composerRef}
-        ptyId={ptyId}
-        workspaceId={info?.workspaceId ?? params.workspaceId}
-        agentId={info?.agentId ?? params.agentId}
-        active={active}
-      />
     </div>
   )
 }

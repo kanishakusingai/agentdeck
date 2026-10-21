@@ -7,7 +7,7 @@ import { AppCore } from './core'
 // Tests run against a throwaway data folder.
 if (process.env.AGENTDECK_USER_DATA) app.setPath('userData', process.env.AGENTDECK_USER_DATA)
 
-const BG = '#08080a'
+const BG = '#050506'
 const BROWSER_PARTITION = 'persist:agentdeck-browser'
 let mainWindow: BrowserWindow | null = null
 let core: AppCore
@@ -169,24 +169,11 @@ function registerIpc(): void {
     if (dir) void shell.openPath(dir)
   })
 
-  handle('threads:list', () => core.listThreads())
-  handle('threads:get', (id) => core.getThread(id))
-  handle('threads:forPty', (id) => core.threadForPty(id))
-  handle('threads:search', (query) => core.searchThreads(String(query ?? '')))
-
-  handle('routines:save', (r) => core.saveRoutine(r))
-  handle('routines:remove', (id) => core.removeRoutine(id))
-  handle('routines:runNow', (id) => core.runRoutineNow(id))
-  handle('routines:listRuns', () => core.listRuns())
-  handle('routines:getRun', (id) => core.getRun(id))
-
   handle('limits:continueOnAccount', (ptyId, accountId, cols, rows) => core.continueOnAccount(ptyId, accountId, cols, rows))
   handle('limits:resumeLater', (id) => core.resumeLater(id))
   handle('limits:dismiss', (id) => core.dismissLimit(id))
 
   handle('voice:enhance', (text) => core.enhancePrompt(String(text ?? '')))
-
-  handle('composer:files', (workspaceId) => core.workspaceFiles(workspaceId))
 }
 
 if (!app.requestSingleInstanceLock()) {
@@ -205,7 +192,6 @@ if (!app.requestSingleInstanceLock()) {
     registerIpc()
     setupPermissions()
     createWindow()
-    core.start()
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow()

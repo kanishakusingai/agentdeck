@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { create } from 'zustand'
 import { openTerminal } from '../../lib/canvas'
 import { cn } from '../../lib/cn'
-import { errorText, setActiveWorkspace, setMode, toast } from '../../lib/store'
+import { errorText, setActiveWorkspace, toast } from '../../lib/store'
 import { Button } from '../ui'
 
 /*
@@ -19,7 +19,6 @@ async function createProject(name: string, where: 'folder' | 'none'): Promise<bo
   try {
     const id = where === 'folder' ? await window.api.workspaces.add(name) : await window.api.workspaces.addScratch(name)
     if (!id) return false // folder picker cancelled
-    setMode('code')
     setActiveWorkspace(id)
     toast(`Project “${name}” is ready. Use Launch to open a terminal or an agent.`, 'success')
     return true
@@ -36,7 +35,6 @@ export const QUICK_SESSIONS = 'Quick sessions'
 async function continueWithoutProject(): Promise<boolean> {
   try {
     const id = await window.api.workspaces.addScratch(QUICK_SESSIONS)
-    setMode('code')
     setActiveWorkspace(id)
     await openTerminal({ workspaceId: id })
     return true

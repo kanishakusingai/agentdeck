@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'fs'
 import { join } from 'path'
-import { type AppData, DEFAULT_SETTINGS, DEFAULT_UI, emptyAppData } from '@shared/types'
+import { type AppData, DEFAULT_SETTINGS, DEFAULT_UI, emptyAppData, type UiState } from '@shared/types'
 
 const FILE_NAME = 'agentdeck-data.json'
 
@@ -56,12 +56,14 @@ export class JsonStore {
     const base = emptyAppData()
     if (!existsSync(this.file)) return base
     try {
-      const raw = JSON.parse(readFileSync(this.file, 'utf8')) as Partial<AppData>
+      // Older versions also saved routines, their runs and a mode switch: those are dropped.
+      const { routines: _routines, runs: _runs, ...raw } = JSON.parse(readFileSync(this.file, 'utf8')) as Partial<AppData> & { routines?: unknown; runs?: unknown }
+      const { mode: _mode, ...ui } = (raw.ui ?? {}) as Partial<UiState> & { mode?: unknown }
       return {
         ...base,
         ...raw,
         settings: { ...DEFAULT_SETTINGS, ...(raw.settings ?? {}) },
-        ui: { ...DEFAULT_UI, ...(raw.ui ?? {}) }
+        ui: { ...DEFAULT_UI, ...ui }
       }
     } catch {
       // Keep the broken file for inspection and start fresh.

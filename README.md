@@ -13,10 +13,11 @@
 
 - **Multi-Agent Dockview Canvas**: Dock, split, tab, and arrange multiple terminal panes side-by-side using `dockview-react` and `xterm.js`.
 - **Works with Any Coding Agent**: Native support for **Claude Code**, **OpenAI Codex**, **OpenCode**, **Kiro CLI**, PowerShell, and Bash.
-- **Dedicated Terminal Composer**: Each active terminal pane has its own advanced message input with slash-command discovery and multi-line support.
+- **Named Agent Panes**: Every agent pane gets a teammate's name and a header with a live status dot, a menu, fill-the-screen, a New pane menu (terminal, any installed agent, split down, new tab, new session) and close.
+- **Workspaces & Sessions**: A left panel lists your workspaces and the sessions inside each, with live status dots and pane counts.
+- **Built-in Browser Sidebar**: Dashboard of every running pane plus browser tabs named after their page, with desktop / tablet / phone preview sizes.
 - **Push-to-Talk Voice Dictation**: Hands-free voice coding powered by a local HuggingFace Whisper model running directly on your machine.
 - **Persistent Workspaces**: Preserves your terminal layouts, open tabs, and workspaces across app restarts.
-- **Full-Text Thread Search**: Search across transcripts and conversation histories with instant filtering.
 - **Native Windows Controls**: Native minimize, maximize, and close title bar controls with custom blue/zinc dark theme styling.
 - **100% Local & Private**: No cloud telemetry or third-party servers required. Your API keys and source code stay on your computer.
 
@@ -78,7 +79,7 @@ agentdeck/
 ├── src/
 │   ├── main/           # Electron main process (PTYs, process runner, store, voice worker)
 │   ├── preload/        # Secure typed contextBridge IPC bridge
-│   ├── renderer/       # React 19 UI (dockview canvas, terminal panels, composers)
+│   ├── renderer/       # React 19 UI (dockview canvas, terminal panes, sidebar)
 │   └── shared/         # Shared TypeScript interfaces, types, and schemas
 ├── e2e/                # Playwright end-to-end Electron tests
 └── docs/               # Specifications and architecture documentation

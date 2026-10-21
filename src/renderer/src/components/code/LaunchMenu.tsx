@@ -7,7 +7,8 @@ import { refreshAgents, toast, useApp } from '../../lib/store'
 import { openAgentsDirectory } from './AgentsDirectory'
 import { AgentIcon, Button, Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger } from '../ui'
 
-function AgentItem({ agent, workspaceId, sessionId }: { agent: DetectedAgent; workspaceId: string; sessionId?: string }) {
+/** One agent in a menu: starts it in a new pane (a side menu picks the account when there are several). */
+export function AgentItem({ agent, workspaceId, sessionId }: { agent: DetectedAgent; workspaceId: string; sessionId?: string }) {
   const allAccounts = useApp((s) => s.snapshot!.accounts)
   const accounts = allAccounts.filter((a) => a.provider === agent.provider)
   const launch = (accountId?: string): void => void openTerminal({ workspaceId, sessionId, agentId: agent.id, accountId })

@@ -301,12 +301,12 @@ function TerminalSection() {
 }
 
 export const SHORTCUTS: [string, string][] = [
-  ['Agent / Code / Thread mode', 'Ctrl+1 / 2 / 3'],
   ['New terminal', 'Ctrl+Shift+T'],
   ['Launch default agent (Claude Code)', 'Ctrl+Shift+A'],
   ['Split active pane right', 'Ctrl+Shift+\\'],
-  ['Split active pane down', 'Ctrl+Shift+-'],
-  ['Tidy the canvas', 'Ctrl+Shift+L'],
+  ['Split active pane down', 'Ctrl+Shift+D'],
+  ['Make the active pane fill the screen (again to go back)', 'F11'],
+  ['Tidy the panes', 'Ctrl+Shift+L'],
   ['Show / hide the right sidebar', 'Ctrl+B'],
   ['Show / hide the left panel', 'Ctrl+Shift+B'],
   ['Add a workspace', 'Ctrl+O'],

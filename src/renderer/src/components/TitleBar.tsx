@@ -1,38 +1,10 @@
-import { Loader2, Mic, PanelLeft, PanelRight, Settings2 } from 'lucide-react'
-import type { Mode } from '@shared/types'
+import { Bell, Loader2, Mic, PanelLeft, PanelRight } from 'lucide-react'
+import { tracker, useActivityClock } from '../lib/activity'
 import { cn } from '../lib/cn'
-import { setMode, toggleRail, toggleSidebar, useApp } from '../lib/store'
+import { setSidebarTab, toggleRail, toggleSidebar, useApp } from '../lib/store'
 import { toggleRecording, useVoice } from '../voice/dictation'
+import { LayoutMenu } from './code/LayoutMenu'
 import { IconButton, Tip } from './ui'
-
-const MODES: { id: Mode; label: string; key: string }[] = [
-  { id: 'agent', label: 'Agent', key: '1' },
-  { id: 'code', label: 'Code', key: '2' },
-  { id: 'thread', label: 'Thread', key: '3' }
-]
-
-function ModeSwitch({ mode }: { mode: Mode }) {
-  return (
-    <div role="tablist" aria-label="Mode" className="no-drag flex h-7 items-center gap-0.5 rounded-lg border border-line bg-panel p-[3px]">
-      {MODES.map((m) => (
-        <Tip key={m.id} label={<>{m.label} mode · Ctrl+{m.key}</>}>
-          <button
-            role="tab"
-            aria-selected={mode === m.id}
-            data-mode={m.id}
-            onClick={() => setMode(m.id)}
-            className={cn(
-              'no-drag flex h-full min-w-[64px] items-center justify-center rounded-md px-3 text-xs font-medium',
-              mode === m.id ? 'bg-hover text-fg shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]' : 'text-fg-faint hover:text-fg'
-            )}
-          >
-            {m.label}
-          </button>
-        </Tip>
-      ))}
-    </div>
-  )
-}
 
 function VoiceIndicator() {
   const { ptt, modelProgress } = useVoice()
@@ -66,48 +38,59 @@ function VoiceIndicator() {
   )
 }
 
+/** The bell: how many panes are waiting for you; click to see them on the dashboard. */
+function Notifications() {
+  const ptys = useApp((s) => s.ptys)
+  const now = useActivityClock()
+  const waiting = Object.values(ptys).filter((p) => tracker.activity(p, now) === 'needs').length
+  const label = waiting === 0 ? 'Nothing needs you' : `${waiting} pane${waiting === 1 ? ' needs' : 's need'} you`
+  return (
+    <Tip label={label}>
+      <button aria-label={label} onClick={() => setSidebarTab('dashboard')} className="no-drag relative flex h-7 w-7 items-center justify-center rounded-md text-fg-muted transition-colors hover:bg-hover hover:text-fg" data-testid="notifications">
+        <Bell size={15} />
+        {waiting > 0 && (
+          <span className="tabular absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent-solid px-1 text-[10px] font-semibold leading-none text-white" data-testid="notifications-count">
+            {waiting}
+          </span>
+        )}
+      </button>
+    </Tip>
+  )
+}
+
 export function TitleBar() {
-  const mode = useApp((s) => s.snapshot!.ui.mode)
   const sidebarOpen = useApp((s) => s.snapshot!.ui.sidebarOpen)
   const railOpen = useApp((s) => s.snapshot!.ui.railOpen)
+  const hasWorkspaces = useApp((s) => s.snapshot!.workspaces.length > 0)
   const isMac = window.api.platform === 'darwin'
 
   return (
-    // Three-column grid keeps the mode switch centred without CSS transforms:
-    // Electron computes the title bar's clickable (no-drag) areas without transforms,
-    // so a translated switch would sit in the wrong place and swallow clicks.
     // Windows draws its own minimise / maximise / close buttons over the right edge (titleBarOverlay).
-    <header
-      className="drag grid h-12 shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-3"
-      style={{ paddingLeft: isMac ? 84 : 12, paddingRight: isMac ? 8 : 150 }}
-    >
+    <header className="drag flex h-12 shrink-0 items-center justify-between gap-3" style={{ paddingLeft: isMac ? 84 : 14, paddingRight: isMac ? 10 : 150 }}>
       <div className="flex min-w-0 items-center gap-3">
         <div className="flex min-w-0 items-center gap-2">
-          <Logo />
-          <span className="text-[13px] font-semibold tracking-tight text-fg">AgentDeck</span>
+          <Logo size={20} />
+          <span className="text-[15px] font-semibold tracking-[-0.015em] text-fg">AgentDeck</span>
         </div>
         <IconButton
           label={railOpen ? 'Hide the left panel · Ctrl+Shift+B' : 'Show the left panel · Ctrl+Shift+B'}
           onClick={() => toggleRail()}
-          className={cn('h-6 w-6', railOpen && 'text-fg')}
+          className={cn('no-drag ml-4 h-7 w-7', railOpen && 'text-fg')}
         >
-          <PanelLeft size={14} />
+          <PanelLeft size={15} />
         </IconButton>
       </div>
 
-      <ModeSwitch mode={mode} />
-
-      <div className="flex items-center justify-end gap-0.5">
-        <VoiceIndicator />
-        {mode === 'code' && (
-          <IconButton label={sidebarOpen ? 'Hide sidebar · Ctrl+B' : 'Show sidebar · Ctrl+B'} onClick={() => toggleSidebar()} className={sidebarOpen ? 'text-fg' : undefined}>
+      {hasWorkspaces && (
+        <div className="flex items-center gap-1">
+          <LayoutMenu />
+          <VoiceIndicator />
+          <Notifications />
+          <IconButton label={sidebarOpen ? 'Hide sidebar · Ctrl+B' : 'Show sidebar · Ctrl+B'} onClick={() => toggleSidebar()} className={cn('no-drag', sidebarOpen && 'text-fg')}>
             <PanelRight size={15} />
           </IconButton>
-        )}
-        <IconButton label="Settings · Ctrl+," onClick={() => useApp.setState({ settingsOpen: 'agents' })}>
-          <Settings2 size={15} />
-        </IconButton>
-      </div>
+        </div>
+      )}
     </header>
   )
 }

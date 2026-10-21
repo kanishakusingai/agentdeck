@@ -1,11 +1,14 @@
 # Glossary
 
-- **Workspace**: a folder on disk the user works in. Shown in the left rail; owns a pane canvas.
-- **Session**: one screen of panes inside a workspace (up to 8 panes). A workspace has one or more sessions; the left rail lists them.
-- **Pane**: one tile on a session's canvas. Kinds: terminal and thread. (Browsers live only in the sidebar; browser panes saved by older versions still reopen.)
-- **Launch menu**: the one button that opens a new pane in the session — a plain terminal at the top, then ten agents (installed ones first), then **All agents**, the directory of every known agent CLI with how to install it.
+- **Workspace**: a folder on disk the user works in (also called a project). Listed in the left rail under **Workspaces**, with its sessions under it.
+- **Session**: one screen of panes inside a workspace (up to 8 panes). A workspace has one or more sessions; the left rail lists them with a dot (green while something runs) and their pane count.
+- **Pane**: one tile on a session's canvas: a plain terminal, nothing else (no message box under it). Its header shows a status dot, the agent's icon and its name, then ⋯ (pane menu), fill the screen (F11), + (**New pane** menu) and × (close). (Browsers live only in the sidebar; browser panes saved by older versions still reopen.)
+- **Pane name**: agent panes get a person's name (Matthew, John, Cynthia, …) so several agents in one workspace are easy to tell apart; plain terminals are numbered (Terminal, Terminal 2, …). Panes can be renamed; the name survives a restart.
+- **New pane menu**: the + in a pane's header — Terminal, the agents installed on this PC, More agents…, Split Down, New Tab (behind this pane) and New Session…
+- **Fill the screen**: one pane takes the whole canvas while the others keep running behind it; F11 or the same button goes back.
+- **Launch menu**: the button on an empty session that opens its first pane — a plain terminal at the top, then ten agents (installed ones first), then **All agents**, the directory of every known agent CLI with how to install it.
 - **Quick sessions**: the project "Continue without a project" opens — the user's own folder, no name to choose.
-- **Sidebar**: the right-hand panel in Code mode: the dashboard plus one or more browser tabs. It is the only place a browser opens.
+- **Sidebar**: the right-hand panel: the dashboard (its tab counts the running panes) plus one or more browser tabs, each named after its page, with a phone/tablet/desktop preview size. It is the only place a browser opens.
 - **Terminal pane**: a live shell (PTY) whose cwd is the workspace folder.
 - **Agent**: a CLI coding tool on PATH (Claude Code, Codex, Gemini CLI, …). Launching an agent opens a terminal pane running it.
 - **Account**: a named sign-in for an agent provider (Claude or Codex), isolated in its own config folder. The app never reads or stores tokens.
@@ -13,8 +16,6 @@
 - **Default account**: the account new agents use unless a workspace or pane overrides it.
 - **Usage limit**: the provider message saying an account is out of quota. Becomes a choice: resume later or continue on another account.
 - **Handoff summary**: a markdown file summarising a conversation, used to continue it on another account.
-- **Thread**: a readable transcript of an agent session, parsed from the agent's own session files.
-- **Routine**: a saved prompt + workspace + agent + account + schedule, run headlessly. Each execution is a **run**.
-- **Mode**: Agent, Code or Thread. The title-bar switch changes the rail, the main area and the composer.
-- **Dictation**: hold-to-talk speech-to-text that runs locally and inserts text into the focused pane or field.
+- **Transcript**: an agent's own saved conversation file (Claude Code, Codex). Only read to write a handoff summary; there is no Thread view any more.
+- **Dictation**: hold-to-talk speech-to-text that runs locally and inserts text into the focused terminal or field.
 - **Enhance Prompt**: rewrites dictated text into a clear brief using the user's own agent CLI headlessly.

@@ -1,6 +1,6 @@
 import { Check, EyeOff, Layers, Maximize2, MonitorUp, Pencil, Plus, X } from 'lucide-react'
 import { sessionsOf, type Session } from '@shared/types'
-import { canvasFor, closeHiddenPane, closePanel, hidePanel, moveToSession, showHiddenPane, toggleZoom, workspaceOfSession } from '../../lib/canvas'
+import { canvasFor, closeHiddenPane, closePanel, hidePanel, moveToSession, showHiddenPane, toggleMaximize, workspaceOfSession } from '../../lib/canvas'
 import { newSession } from '../../lib/sessions'
 import { useApp } from '../../lib/store'
 import { askConfirm, askText } from '../Ask'
@@ -14,7 +14,7 @@ export async function confirmClose(sessionId: string, paneId: string, title: str
     title: `Close “${title}”?`,
     body:
       kind === 'terminal'
-        ? 'The program running in this terminal stops and it leaves the project. Your files are not touched. (To only take it off the screen, use its × instead.)'
+        ? 'The program running in this terminal stops and it leaves the project. Your files are not touched. (To only take it off the screen, use '
         : 'The pane closes. You can open it again any time.',
     confirmLabel: kind === 'terminal' ? 'Close terminal' : 'Close pane'
   })
@@ -76,9 +76,9 @@ export function PaneMenuItems({ sessionId, paneId, title, kind, offScreen = fals
       <MenuItem onSelect={() => void renamePane(sessionId, paneId, title, offScreen)}>
         <Pencil size={13} className="text-fg-muted" /> Rename
       </MenuItem>
-      {kind === 'terminal' && !offScreen && (
-        <MenuItem onSelect={() => toggleZoom(sessionId, paneId)} hint="F11">
-          <Maximize2 size={13} className="text-fg-muted" /> Full screen
+      {!offScreen && (
+        <MenuItem onSelect={() => toggleMaximize(sessionId, paneId)} hint="F11">
+          <Maximize2 size={13} className="text-fg-muted" /> Fill the screen / show all
         </MenuItem>
       )}
       <MenuSeparator />

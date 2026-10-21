@@ -34,8 +34,8 @@ export function withUrl(list: SidebarBrowser[], id: string, url: string): Sideba
 // ---------- sidebar width ----------
 
 export const SIDEBAR_WIDTH = { min: 280, default: 340 }
-/** Width of the left rail (projects / threads / routines). */
-export const RAIL_WIDTH = 244
+/** Width of the left rail (workspaces and their sessions). */
+export const RAIL_WIDTH = 264
 /** The page's side padding and the gaps between rail, panes and sidebar. */
 const GAP = 8
 /** Always leave at least this much room for the panes in the middle. */

@@ -202,33 +202,3 @@ export function readThread(entry: ThreadIndexEntry): Thread {
   const { file: _file, ...summary } = entry
   return { ...summary, cwd: parsed.cwd || entry.cwd, title: parsed.title, messages: parsed.messages }
 }
-
-// Lower-cased conversation text per file, reused while the file is unchanged.
-const textCache = new Map<string, { mtime: number; size: number; text: string }>()
-const MAX_SEARCH_TEXT = 400_000
-
-function conversationText(entry: ThreadIndexEntry): string {
-  const cached = textCache.get(entry.file)
-  if (cached && cached.mtime === entry.updatedAt && cached.size === entry.sizeBytes) return cached.text
-  let text = ''
-  try {
-    const parsed = parserFor(entry.agent)(readFileSync(entry.file, 'utf8'))
-    text = parsed.messages
-      .filter((m) => m.role !== 'tool')
-      .map((m) => m.text)
-      .join('\n')
-      .toLowerCase()
-      .slice(0, MAX_SEARCH_TEXT)
-  } catch {
-    /* unreadable */
-  }
-  textCache.set(entry.file, { mtime: entry.updatedAt, size: entry.sizeBytes, text })
-  return text
-}
-
-/** Ids of threads whose prompts or replies contain the query (case-insensitive). */
-export function searchThreads(entries: ThreadIndexEntry[], query: string): string[] {
-  const q = query.trim().toLowerCase()
-  if (q.length < 2) return []
-  return entries.filter((e) => conversationText(e).includes(q)).map((e) => e.id)
-}

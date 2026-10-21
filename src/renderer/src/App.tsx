@@ -1,50 +1,40 @@
 import { AlertCircle, CheckCircle2, Info } from 'lucide-react'
 import { useEffect } from 'react'
-import type { Mode } from '@shared/types'
-import { AgentMain, RoutineRail } from './components/agent/AgentMode'
-import { Canvas, CanvasToolbar } from './components/code/Canvas'
+import { sessionsOf } from '@shared/types'
+import { AgentsDirectory } from './components/code/AgentsDirectory'
+import { Canvas } from './components/code/Canvas'
 import { addWorkspace, CodeRail } from './components/code/CodeRail'
+import { NewProjectDialog, openNewProject } from './components/code/NewProject'
 import { ResizableSidebar } from './components/code/ResizableSidebar'
 import { Welcome } from './components/code/Welcome'
 import { AskHost } from './components/Ask'
 import { SettingsDialog } from './components/SettingsDialog'
-import { ThreadMain, ThreadRail } from './components/thread/ThreadMode'
 import { TitleBar } from './components/TitleBar'
 import { TooltipProvider } from './components/ui'
-import { activeSessionId, arrange, canvasFor, openTerminal, toggleZoom } from './lib/canvas'
-import { sessionsOf } from '@shared/types'
-import { FullScreenTerminal } from './components/code/FullScreen'
-import { NewProjectDialog, openNewProject } from './components/code/NewProject'
-import { AgentsDirectory } from './components/code/AgentsDirectory'
-import { cn } from './lib/cn'
+import { activeSessionId, arrange, canvasFor, openTerminal, toggleMaximize } from './lib/canvas'
 import { RAIL_WIDTH } from './lib/sidebar'
-import { boot, setMode, toggleRail, toggleSidebar, useApp } from './lib/store'
+import { boot, toggleRail, toggleSidebar, useApp } from './lib/store'
 import { installPushToTalk } from './voice/dictation'
 
 function useShortcuts(): void {
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       const ctrl = e.ctrlKey || e.metaKey
-      // F11: show the active pane over the whole window (again to go back).
-      if (e.key === 'F11' && !ctrl && !e.shiftKey && !e.altKey) {
-        const { snapshot, zoomed } = useApp.getState()
-        const wsId = snapshot?.ui.activeWorkspaceId
-        if (!zoomed && (!wsId || snapshot?.ui.mode !== 'code')) return
-        e.preventDefault()
-        e.stopPropagation()
-        return toggleZoom(wsId ? activeSessionId(wsId) : '')
-      }
-      if (!ctrl) return
       const { snapshot } = useApp.getState()
       if (!snapshot) return
       const wsId = snapshot.ui.activeWorkspaceId
-      const k = e.key.toLowerCase()
       const run = (fn: () => void): void => {
         e.preventDefault()
         e.stopPropagation()
         fn()
       }
-      if (!e.shiftKey && ['1', '2', '3'].includes(k)) return run(() => setMode((['agent', 'code', 'thread'] as Mode[])[Number(k) - 1]))
+      // F11: the active pane fills the screen (again to show all panes).
+      if (e.key === 'F11' && !ctrl && !e.shiftKey && !e.altKey) {
+        if (wsId) run(() => toggleMaximize(activeSessionId(wsId)))
+        return
+      }
+      if (!ctrl) return
+      const k = e.key.toLowerCase()
       if (!e.shiftKey && k === 'b') return run(() => toggleSidebar())
       if (e.shiftKey && k === 'b') return run(() => toggleRail())
       if (!e.shiftKey && k === ',') return run(() => useApp.setState({ settingsOpen: 'agents' }))
@@ -54,9 +44,10 @@ function useShortcuts(): void {
       if (k === 't') return run(() => void openTerminal({ workspaceId: wsId }))
       if (k === 'a') return run(() => void openTerminal({ workspaceId: wsId, agentId: 'claude' }))
       if (k === 'l') return run(() => arrange(activeSessionId(wsId)))
-      if (k === '|' || k === '\\' || k === '_' || k === '-') {
+      const down = k === 'd' || k === '_' || k === '-'
+      if (down || k === '|' || k === '\\') {
         const ref = canvasFor(activeSessionId(wsId))?.activePanel?.id
-        return run(() => void openTerminal({ workspaceId: wsId, referencePanel: ref, direction: k === '_' || k === '-' ? 'below' : 'right' }))
+        return run(() => void openTerminal({ workspaceId: wsId, referencePanel: ref, direction: down ? 'below' : 'right' }))
       }
     }
     // Capture so shortcuts work even while a terminal has focus.
@@ -83,82 +74,57 @@ function Toasts() {
   )
 }
 
-function CodeMain() {
+/** The panes: every session of every project keeps its canvas mounted so terminals keep running. */
+function Panes() {
   const workspaces = useApp((s) => s.snapshot!.workspaces)
   const activeId = useApp((s) => s.snapshot!.ui.activeWorkspaceId)
-  const activeSessions = useApp((s) => s.snapshot!.ui.activeSessions)
-  if (workspaces.length === 0) return <Welcome />
-  void activeSessions
+  // Re-render when the shown session changes (activeSessionId reads it).
+  useApp((s) => s.snapshot!.ui.activeSessions)
   return (
-    <div className="flex h-full min-h-0 flex-col gap-2">
-      {activeId && <CanvasToolbar workspaceId={activeId} />}
-      <div className="relative min-h-0 flex-1">
-        {/* Every session of every project keeps its canvas mounted so terminals keep running. */}
-        {workspaces.flatMap((w) => {
-          const shown = activeSessionId(w.id)
-          return sessionsOf(w).map((s) => <Canvas key={s.id} workspaceId={w.id} sessionId={s.id} visible={w.id === activeId && s.id === shown} />)
-        })}
-      </div>
+    <div className="relative h-full min-h-0">
+      {workspaces.flatMap((w) => {
+        const shown = activeSessionId(w.id)
+        return sessionsOf(w).map((s) => <Canvas key={s.id} workspaceId={w.id} sessionId={s.id} visible={w.id === activeId && s.id === shown} />)
+      })}
     </div>
   )
 }
 
 export function App() {
   const ready = useApp((s) => s.ready)
-  const mode = useApp((s) => s.snapshot?.ui.mode)
   const hasWorkspaces = useApp((s) => (s.snapshot?.workspaces.length ?? 0) > 0)
   const railOpen = useApp((s) => s.snapshot?.ui.railOpen !== false)
   const sidebarOpen = useApp((s) => Boolean(s.snapshot?.ui.sidebarOpen))
   useShortcuts()
-
 
   useEffect(() => {
     void boot()
     return installPushToTalk()
   }, [])
 
-  if (!ready || !mode) return <div className="h-full bg-bg" />
-
-  // With no workspace yet, Code mode is a full-width welcome screen.
-  const showRail = railOpen && (mode !== 'code' || hasWorkspaces)
-  const showSidebar = mode === 'code' && sidebarOpen && hasWorkspaces
+  if (!ready) return <div className="h-full bg-bg" />
 
   return (
     <TooltipProvider>
-      <div className="flex h-full flex-col bg-bg" data-mode={mode}>
+      <div className="flex h-full flex-col bg-bg">
         <TitleBar />
         <div className="flex min-h-0 flex-1 gap-2 px-2 pb-2">
-          {showRail && (
-            <aside className="card shrink-0 overflow-hidden" style={{ width: RAIL_WIDTH }} data-testid={`rail-${mode}`}>
-              {mode === 'code' && <CodeRail />}
-              {mode === 'thread' && <ThreadRail />}
-              {mode === 'agent' && <RoutineRail />}
+          {/* With no project yet, the welcome screen takes the whole window. */}
+          {railOpen && hasWorkspaces && (
+            <aside className="card shrink-0 overflow-hidden" style={{ width: RAIL_WIDTH }} data-testid="rail">
+              <CodeRail />
             </aside>
           )}
-          <main className="relative min-w-0 flex-1" data-testid={`main-${mode}`}>
-            {/* Code mode stays mounted (hidden) so terminals survive mode switches. */}
-            <div className={cn('absolute inset-0', mode !== 'code' && 'keep-hidden')} aria-hidden={mode !== 'code'}>
-              <CodeMain />
-            </div>
-            {mode === 'thread' && (
-              <div className="card absolute inset-0 z-20 overflow-hidden">
-                <ThreadMain />
-              </div>
-            )}
-            {mode === 'agent' && (
-              <div className="card absolute inset-0 z-20 overflow-hidden">
-                <AgentMain />
-              </div>
-            )}
+          <main className="relative min-w-0 flex-1" data-testid="main">
+            {hasWorkspaces ? <Panes /> : <Welcome />}
           </main>
-          {showSidebar && <ResizableSidebar />}
+          {sidebarOpen && hasWorkspaces && <ResizableSidebar />}
         </div>
       </div>
       <SettingsDialog />
       <AskHost />
       <NewProjectDialog />
       <AgentsDirectory />
-      {mode === 'code' && <FullScreenTerminal />}
       <Toasts />
     </TooltipProvider>
   )

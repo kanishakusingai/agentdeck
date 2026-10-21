@@ -61,20 +61,6 @@ const api = {
     setDefault: call('accounts:setDefault'),
     reveal: call('accounts:reveal')
   },
-  threads: {
-    list: call('threads:list'),
-    get: call('threads:get'),
-    forPty: call('threads:forPty'),
-    search: call('threads:search')
-  },
-  routines: {
-    save: call('routines:save'),
-    remove: call('routines:remove'),
-    runNow: call('routines:runNow'),
-    listRuns: call('routines:listRuns'),
-    getRun: call('routines:getRun'),
-    onRuns: on('routines:runs')
-  },
   limits: {
     continueOnAccount: call('limits:continueOnAccount'),
     resumeLater: call('limits:resumeLater'),
@@ -82,9 +68,6 @@ const api = {
   },
   voice: {
     enhance: call('voice:enhance')
-  },
-  composer: {
-    files: call('composer:files')
   }
 } satisfies AgentDeckApi
 
