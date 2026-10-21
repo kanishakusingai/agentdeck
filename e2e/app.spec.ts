@@ -60,6 +60,12 @@ test('the whole app: workspaces, terminals, layout, modes, persistence', async (
   // 3b. Every pane has its own message box: Enter sends it to that terminal
   const box = page.getByTestId('pane-composer').first().locator('textarea')
   await box.click()
+  // Typing must not resize the terminal (a resize makes the shell redraw over itself)
+  const termHeight = () => page.locator('[data-pty-id] > div.min-h-0').first().evaluate((e) => e.getBoundingClientRect().height)
+  const heightBefore = await termHeight()
+  await box.press('x')
+  expect(await termHeight()).toBe(heightBefore)
+  await box.fill('')
   await box.fill('echo composer-$(40+2)')
   await box.press('Enter')
   await expect(page.locator('.xterm-rows').first()).toContainText('composer-42', { timeout: 15000 })
@@ -87,13 +93,43 @@ test('the whole app: workspaces, terminals, layout, modes, persistence', async (
   }
   await shot(page, '03b-even-tiles')
 
-  // 4b. Full screen: one pane over the whole window, then back
-  await page.getByTestId('zoom-pane').first().click()
+  // 4b. Full screen: one pane over the whole window, then back to the exact same sizes
+  const rects = () => page.locator('.dv-groupview').evaluateAll((els) => els.map((e) => { const r = e.getBoundingClientRect(); return [Math.round(r.x), Math.round(r.y), Math.round(r.width), Math.round(r.height)].join(',') }))
+  const rectsBefore = await rects()
+  await page.getByTestId('zoom-pane').nth(1).click()
   await expect(page.getByTestId('rail-code')).toBeHidden()
   await expect(page.getByTestId('new-terminal')).toBeHidden()
   await shot(page, '03c-full-screen')
   await page.keyboard.press('F11')
   await expect(page.getByTestId('rail-code')).toBeVisible()
+  await expect(page.getByTestId('pane-tab')).toHaveCount(4)
+  await expect.poll(rects).toEqual(rectsBefore)
+
+  // 4c. Projects: right-click a terminal › Move to project › New project…
+  await page.getByTestId('pane-row').nth(1).click({ button: 'right' })
+  await expect(page.getByTestId('context-menu')).toBeVisible()
+  await page.getByRole('menuitem', { name: 'Move to project' }).click()
+  await page.getByRole('menuitem', { name: 'New project…' }).click()
+  await expect(page.getByTestId('ask-dialog')).toBeVisible()
+  await page.getByLabel('Project name').fill('Backend')
+  await shot(page, '03d-new-project')
+  await page.getByTestId('ask-confirm').click()
+  const project = page.getByTestId('project-row').filter({ hasText: 'Backend' })
+  await expect(project).toBeVisible()
+  await expect(project.getByTestId('pane-row')).toHaveCount(1)
+  // Another terminal goes into the same project from the pane tab's right-click menu
+  await page.getByTestId('pane-tab').nth(2).click({ button: 'right' })
+  await page.getByRole('menuitem', { name: 'Move to project' }).click()
+  await page.getByRole('menuitem', { name: 'Backend' }).click()
+  await expect(project.getByTestId('pane-row')).toHaveCount(2)
+  await shot(page, '03e-project-in-rail')
+  // Closing from the right-click menu asks first, in the app's own dialog
+  await page.getByTestId('pane-row').first().click({ button: 'right' })
+  await page.getByRole('menuitem', { name: 'Close terminal' }).click()
+  await expect(page.getByTestId('ask-dialog')).toContainText('The program running in this terminal stops')
+  await shot(page, '03f-close-confirm')
+  await page.getByRole('button', { name: 'Cancel' }).click()
+  await expect(page.getByTestId('ask-dialog')).toBeHidden()
   await expect(page.getByTestId('pane-tab')).toHaveCount(4)
 
   await page.getByTestId('tidy').click()
@@ -190,12 +226,21 @@ test('the whole app: workspaces, terminals, layout, modes, persistence', async (
   await expect(page.getByTestId('workspace-row')).toHaveCount(1)
   // The saved layout comes back with fresh shells in each pane
   await expect(page.getByTestId('pane-tab')).toHaveCount(3)
+  // Projects and their panes survive a restart
+  await expect(page.getByTestId('project-row').filter({ hasText: 'Backend' })).toBeVisible()
   // Restored panes belong to their workspace (and start in its folder)
   await expect(page.getByTestId('dashboard-row').first()).toContainText('agentdeck-e2e-site-')
 
   // 13. Continue without a folder: a scratch workspace is added and opened
   await page.getByTestId('add-workspace').click()
   await page.getByRole('menuitem', { name: /Continue without a folder/ }).click()
+  await expect(page.getByTestId('workspace-row')).toHaveCount(2)
+  // Removing a workspace asks in the app's own dialog; Cancel keeps it
+  await page.getByRole('button', { name: /options$/ }).first().click()
+  await page.getByRole('menuitem', { name: 'Remove from AgentDeck' }).click()
+  await expect(page.getByTestId('ask-dialog')).toContainText('Your files stay where they are')
+  await shot(page, '10b-remove-workspace')
+  await page.keyboard.press('Escape')
   await expect(page.getByTestId('workspace-row')).toHaveCount(2)
   await expect(page.getByTestId('workspace-row').filter({ hasText: 'Home' })).toBeVisible()
   await expect(page.getByText('No panes open').locator('visible=true').first()).toBeVisible()

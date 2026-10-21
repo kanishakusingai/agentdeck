@@ -1,5 +1,6 @@
 import { Bot, CalendarClock, CheckCircle2, CircleDashed, Loader2, Pencil, Play, Plus, Trash2, XCircle, Zap } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import { askConfirm } from '../Ask'
 import { agentById } from '@shared/agents'
 import { describeSchedule } from '@shared/schedule'
 import type { Routine, RoutineRun, RunStatus } from '@shared/types'
@@ -185,10 +186,15 @@ export function AgentMain() {
           <IconButton
             label="Delete"
             onClick={() => {
-              if (confirm(`Delete the routine "${routine.name}" and its run history?`)) {
+              void askConfirm({
+                title: `Delete the routine “${routine.name}”?`,
+                body: 'It stops running on its schedule and its run history is deleted. This can’t be undone.',
+                confirmLabel: 'Delete routine'
+              }).then((ok) => {
+                if (!ok) return
                 void window.api.routines.remove(routine.id)
                 useApp.setState({ selectedRoutineId: null })
-              }
+              })
             }}
           >
             <Trash2 size={14} />

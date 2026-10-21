@@ -4,7 +4,8 @@ import * as RSelect from '@radix-ui/react-select'
 import * as RTooltip from '@radix-ui/react-tooltip'
 import { cva, type VariantProps } from 'class-variance-authority'
 import { Aperture, Asterisk, Atom, Bot, Boxes, Check, ChevronDown, CodeXml, Feather, Moon, MousePointer2, Orbit, Sparkle, SquareTerminal, X, Zap } from 'lucide-react'
-import { Children, forwardRef, isValidElement, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactElement, type ReactNode, type TextareaHTMLAttributes } from 'react'
+import { Children, forwardRef, isValidElement, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactElement, type ReactNode, type TextareaHTMLAttributes } from 'react'
+import { createPortal } from 'react-dom'
 import type { PaneStatus } from '@shared/types'
 import type { Activity } from '../lib/activity'
 import { cn } from '../lib/cn'
@@ -357,6 +358,40 @@ export const menuItem =
 export const Menu = RMenu.Root
 export const MenuTrigger = RMenu.Trigger
 export const MenuSub = RMenu.Sub
+
+/**
+ * Right-click menu: wrap any element; menu holds MenuItem rows. Opens at the pointer.
+ * (Built on the dropdown menu so every menu in the app looks and behaves the same.)
+ */
+export function ContextMenu({ children, menu, className }: { children: ReactNode; menu: ReactNode; className?: string }) {
+  const [at, setAt] = useState<{ x: number; y: number } | null>(null)
+  return (
+    <div
+      className={className}
+      onContextMenu={(e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        setAt({ x: e.clientX, y: e.clientY })
+      }}
+    >
+      {children}
+      <RMenu.Root open={at !== null} onOpenChange={(open) => !open && setAt(null)} modal={false}>
+        {at &&
+          createPortal(
+            <RMenu.Trigger asChild>
+              <span aria-hidden className="pointer-events-none fixed h-px w-px" style={{ left: at.x, top: at.y }} />
+            </RMenu.Trigger>,
+            document.body
+          )}
+        <RMenu.Portal>
+          <RMenu.Content align="start" side="bottom" sideOffset={2} collisionPadding={8} className={menuSurface} data-testid="context-menu">
+            {menu}
+          </RMenu.Content>
+        </RMenu.Portal>
+      </RMenu.Root>
+    </div>
+  )
+}
 
 export function MenuContent({ children, align = 'start', className }: { children: ReactNode; align?: 'start' | 'end' | 'center'; className?: string }) {
   return (

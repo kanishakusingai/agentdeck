@@ -37,6 +37,8 @@ type Suggestion =
   | { kind: 'file'; id: string; path: string }
 
 const MAX_HEIGHT = 168
+/** Height of the one-line box (padding + one 13px line), so the first letter doesn't change it. */
+const ONE_LINE = 36
 
 /**
  * The message box under every terminal pane: type a message and press Enter,
@@ -84,12 +86,17 @@ export const PaneComposer = forwardRef<PaneComposerHandle, Props>(function PaneC
     }
   }, [workspaceId, agentId])
 
-  // Grow with the content.
+  // Grow with the content. An empty box is always one line (a long placeholder must not
+  // wrap): any height change resizes the terminal above, which makes the shell redraw.
   useEffect(() => {
     const el = ref.current
     if (!el) return
+    if (!text) {
+      el.style.height = `${ONE_LINE}px`
+      return
+    }
     el.style.height = 'auto'
-    el.style.height = `${Math.min(el.scrollHeight, MAX_HEIGHT)}px`
+    el.style.height = `${Math.min(Math.max(el.scrollHeight, ONE_LINE), MAX_HEIGHT)}px`
   }, [text])
 
   const rawTrigger = detectTrigger(text, caret)
@@ -240,9 +247,7 @@ export const PaneComposer = forwardRef<PaneComposerHandle, Props>(function PaneC
     setValue(`${before}${pad}@${text.slice(at)}`, at + pad.length + 1)
   }
 
-  const placeholder = agent?.provider || agentId
-    ? `Message ${agent?.label ?? 'the agent'} — / for commands, @ for files`
-    : 'Type a command and press Enter — @ for files'
+  const placeholder = agent?.provider || agentId ? `Message ${agent?.label ?? 'the agent'} — / commands, @ files` : 'Type a command — @ for files'
 
   return (
     <div className="@container relative shrink-0 px-2 pb-2 pt-1.5" data-testid="pane-composer">
@@ -326,7 +331,10 @@ export const PaneComposer = forwardRef<PaneComposerHandle, Props>(function PaneC
           aria-label={`Message to ${agent?.label ?? 'this terminal'}`}
           aria-expanded={open}
           aria-autocomplete="list"
-          className="block w-full resize-none bg-transparent px-3 pb-1 pt-2.5 text-[13px] leading-relaxed text-fg outline-none placeholder:text-fg-faint focus:outline-none focus-visible:outline-none"
+          className={cn(
+            'block h-9 w-full resize-none bg-transparent px-3 pb-1 pt-2.5 text-[13px] leading-[21px] text-fg outline-none placeholder:text-fg-faint focus:outline-none focus-visible:outline-none',
+            !text && 'overflow-hidden whitespace-nowrap text-ellipsis'
+          )}
           style={{ maxHeight: MAX_HEIGHT }}
         />
         <div className="flex items-center gap-1 px-1.5 pb-1.5">

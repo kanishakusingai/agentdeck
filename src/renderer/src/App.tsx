@@ -6,6 +6,7 @@ import { Canvas, CanvasToolbar } from './components/code/Canvas'
 import { addWorkspace, CodeRail } from './components/code/CodeRail'
 import { Sidebar } from './components/code/Sidebar'
 import { Welcome } from './components/code/Welcome'
+import { AskHost } from './components/Ask'
 import { SettingsDialog } from './components/SettingsDialog'
 import { ThreadMain, ThreadRail } from './components/thread/ThreadMode'
 import { TitleBar } from './components/TitleBar'
@@ -151,6 +152,7 @@ export function App() {
         </div>
       </div>
       <SettingsDialog />
+      <AskHost />
       <Toasts />
     </TooltipProvider>
   )

@@ -8,6 +8,7 @@ import { cn } from '../lib/cn'
 import { errorText, refreshAgents, saveSettings, toast, useApp, type SettingsSection } from '../lib/store'
 import { preloadModel, useVoice } from '../voice/dictation'
 import { Button, Field, Input, Kbd, Select } from './ui'
+import { askConfirm } from './Ask'
 
 const SECTIONS: { id: SettingsSection; label: string; icon: typeof Mic }[] = [
   { id: 'agents', label: 'Agents & accounts', icon: UserRound },
@@ -114,9 +115,13 @@ function AccountsFor({ provider }: { provider: Provider }) {
               variant="ghost"
               aria-label={`Remove ${a.name}`}
               onClick={() => {
-                if (confirm(`Remove "${a.name}"?\n\nThis signs the account out of AgentDeck and deletes its sign-in folder. Your subscription is not affected.`)) {
-                  void window.api.accounts.remove(a.id)
-                }
+                void askConfirm({
+                  title: `Remove the account “${a.name}”?`,
+                  body: 'This signs it out of AgentDeck and deletes its sign-in folder. Your subscription is not affected.',
+                  confirmLabel: 'Remove account'
+                }).then((ok) => {
+                  if (ok) void window.api.accounts.remove(a.id)
+                })
               }}
             >
               <Trash2 size={13} />

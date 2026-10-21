@@ -20,6 +20,7 @@ function on<C extends keyof EventChannels>(channel: C) {
 
 const api = {
   platform: process.platform,
+  osBuild: process.platform === 'win32' ? Number(process.getSystemVersion().split('.')[2]) || 0 : 0,
   app: {
     getSnapshot: call('app:getSnapshot'),
     getLayouts: call('app:getLayouts'),
@@ -33,6 +34,7 @@ const api = {
     add: call('workspaces:add'),
     addScratch: call('workspaces:addScratch'),
     rename: call('workspaces:rename'),
+    setProjects: call('workspaces:setProjects'),
     remove: call('workspaces:remove'),
     setAccountOverride: call('workspaces:setAccountOverride'),
     reveal: call('workspaces:reveal')

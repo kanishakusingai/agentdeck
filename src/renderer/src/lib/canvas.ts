@@ -12,10 +12,19 @@ export interface PanelParams {
   accountId?: string
   url?: string
   threadId?: string
+  /** Project this pane is filed under (see Workspace.projects). */
+  projectId?: string
 }
 
 const canvases = new Map<string, DockviewApi>()
 const waiters = new Map<string, ((api: DockviewApi) => void)[]>()
+/** True while full screen is being left on purpose (the panels come back a moment later). */
+let leavingZoom = false
+/** The layout just before full screen, so leaving it puts every pane back at its exact size. */
+const beforeZoom = new Map<string, ReturnType<DockviewApi['toJSON']>>()
+const nextFrames = (fn: () => void): void => {
+  requestAnimationFrame(() => requestAnimationFrame(fn))
+}
 /** While > 0, removed panels are being re-arranged, not closed: keep their processes. */
 let rearranging = 0
 
@@ -24,7 +33,7 @@ const paramsOf = (p: IDockviewPanel): PanelParams => (p.params ?? {}) as unknown
 function summarise(api: DockviewApi): PanelSummary[] {
   return api.panels.map((p) => {
     const params = paramsOf(p)
-    return { id: p.id, kind: params.kind ?? 'terminal', title: p.api.title ?? p.title ?? '', ptyId: params.ptyId }
+    return { id: p.id, kind: params.kind ?? 'terminal', title: p.api.title ?? p.title ?? '', ptyId: params.ptyId, projectId: params.projectId }
   })
 }
 
@@ -73,7 +82,7 @@ export function registerCanvas(workspaceId: string, api: DockviewApi): () => voi
     }),
     api.onDidMaximizedGroupChange(() => {
       // Dockview leaves the maximised view by itself when a pane is added: leave full screen too.
-      if (!api.hasMaximizedGroup() && api.groups.length > 1 && useApp.getState().zoomed === workspaceId) useApp.setState({ zoomed: null })
+      if (!leavingZoom && !api.hasMaximizedGroup() && api.groups.length > 1 && useApp.getState().zoomed === workspaceId) useApp.setState({ zoomed: null })
     }),
     api.onDidActivePanelChange(({ panel }) => {
       if (panel) useApp.setState({ activePanel: { workspaceId, panelId: panel.id } })
@@ -147,10 +156,12 @@ function placement(api: DockviewApi, direction?: Direction, referencePanel?: str
 export interface OpenTerminalOptions extends Omit<PtyCreateOptions, 'cols' | 'rows'> {
   direction?: Direction
   referencePanel?: string
+  /** File the new pane under this project. */
+  projectId?: string
 }
 
 export async function openTerminal(opts: OpenTerminalOptions): Promise<PtyInfo | null> {
-  const { direction, referencePanel, ...create } = opts
+  const { direction, referencePanel, projectId, ...create } = opts
   setMode('code')
   setActiveWorkspace(opts.workspaceId)
   let info: PtyInfo
@@ -165,10 +176,10 @@ export async function openTerminal(opts: OpenTerminalOptions): Promise<PtyInfo |
   // An explicit split ("Split right / down") goes exactly there; anything else keeps the tiles even.
   if (direction || referencePanel) {
     leaveFullScreen(api)
-    addTerminalPanel(api, info, placement(api, direction, referencePanel))
+    addTerminalPanel(api, info, placement(api, direction, referencePanel), projectId)
   } else {
     const { position, retile } = evenPlacement(api)
-    addTerminalPanel(api, info, position)
+    addTerminalPanel(api, info, position, projectId)
     if (retile) arrange(opts.workspaceId)
   }
   return info
@@ -179,12 +190,12 @@ function terminalParams(info: PtyInfo): PanelParams {
   return { kind: 'terminal', workspaceId: info.workspaceId, ptyId: info.id, agentId: info.agentId, accountId: info.accountId }
 }
 
-function addTerminalPanel(api: DockviewApi, info: PtyInfo, position: AddPanelPositionOptions | undefined): void {
+function addTerminalPanel(api: DockviewApi, info: PtyInfo, position: AddPanelPositionOptions | undefined, projectId?: string): void {
   api.addPanel({
     id: `term-${info.id}`,
     component: 'terminal',
     title: info.title,
-    params: terminalParams(info) as unknown as Record<string, unknown>,
+    params: { ...terminalParams(info), ...(projectId ? { projectId } : {}) } as unknown as Record<string, unknown>,
     renderer: 'always',
     position
   })
@@ -252,6 +263,30 @@ export function focusPty(ptyId: string): void {
   if (found) focusPanel(found.workspaceId, found.panel.id)
 }
 
+/** File a pane under a project (or take it out of one with undefined). */
+export function moveToProject(workspaceId: string, panelId: string, projectId: string | undefined): void {
+  const api = canvases.get(workspaceId)
+  const panel = api?.getPanel(panelId)
+  if (!api || !panel) return
+  panel.api.updateParameters({ ...(panel.params ?? {}), projectId } as Record<string, unknown>)
+  publish(workspaceId)
+  void window.api.app.setLayout(workspaceId, api.toJSON())
+}
+
+/** A project was deleted: its panes stay open, loose in the workspace. */
+export function clearProject(workspaceId: string, projectId: string): void {
+  const api = canvases.get(workspaceId)
+  if (!api) return
+  for (const p of api.panels) if (paramsOf(p).projectId === projectId) p.api.updateParameters({ ...(p.params ?? {}), projectId: undefined } as Record<string, unknown>)
+  publish(workspaceId)
+  void window.api.app.setLayout(workspaceId, api.toJSON())
+}
+
+/** Close a pane (a terminal's process stops). */
+export function closePanel(workspaceId: string, panelId: string): void {
+  canvases.get(workspaceId)?.getPanel(panelId)?.api.close()
+}
+
 /** Record a new process locally so its pane can attach before the next broadcast. */
 export function rememberPty(info: PtyInfo): void {
   useApp.setState((s) => ({ ptys: { ...s.ptys, [info.id]: info } }))
@@ -300,22 +335,61 @@ export async function restoreLayout(workspaceId: string, api: DockviewApi, layou
   publish(workspaceId)
 }
 
-/** Show the active (or given) pane over the whole window, or go back to the normal view. */
+/**
+ * Show the active (or given) pane over the whole window, or go back to the normal view.
+ * The canvas changes size when the side panels hide/show; that must happen while no
+ * pane is maximised, or dockview scrambles the other panes' sizes. So: entering hides
+ * the panels first and then maximises; leaving restores the panes first, then the panels.
+ */
 export function toggleZoom(workspaceId: string, panelId?: string): void {
   const api = canvases.get(workspaceId)
   if (!api) return
   if (useApp.getState().zoomed === workspaceId) {
-    if (api.hasMaximizedGroup()) api.exitMaximizedGroup()
-    useApp.setState({ zoomed: null })
+    if (!api.hasMaximizedGroup()) return useApp.setState({ zoomed: null })
+    leavingZoom = true
+    api.exitMaximizedGroup()
+    // Let the panes settle at full-window size before the canvas shrinks back.
+    nextFrames(() => {
+      leavingZoom = false
+      useApp.setState({ zoomed: null })
+      nextFrames(() => restoreSizes(workspaceId, api))
+    })
     return
   }
   const panel = panelId ? api.getPanel(panelId) : api.activePanel
   if (!panel) return
   setMode('code')
   setActiveWorkspace(workspaceId)
-  if (api.groups.length > 1) api.maximizeGroup(panel)
   panel.api.setActive()
+  if (api.groups.length > 1) beforeZoom.set(workspaceId, api.toJSON())
   useApp.setState({ zoomed: workspaceId })
+  if (api.groups.length < 2) return
+  // Wait until the canvas has grown to the full window before maximising.
+  nextFrames(() => {
+    if (useApp.getState().zoomed === workspaceId && !api.hasMaximizedGroup() && api.getPanel(panel.id)) api.maximizeGroup(panel)
+  })
+}
+/**
+ * Dockview keeps the pane sizes when un-maximising, but the window-size change that
+ * follows full screen stretches them unevenly. Put the saved layout back if that happened
+ * (and nothing was opened or closed meanwhile).
+ */
+function restoreSizes(workspaceId: string, api: DockviewApi): void {
+  const saved = beforeZoom.get(workspaceId)
+  beforeZoom.delete(workspaceId)
+  if (!saved || api.hasMaximizedGroup()) return
+  const now = api.toJSON()
+  const ids = (l: typeof saved): string => Object.keys(l.panels).sort().join('|')
+  if (ids(saved) !== ids(now) || JSON.stringify(saved.grid.root) === JSON.stringify(now.grid.root)) return
+  const activeId = api.activePanel?.id
+  rearranging++
+  try {
+    api.fromJSON({ ...saved, panels: now.panels })
+  } finally {
+    rearranging--
+  }
+  if (activeId) api.getPanel(activeId)?.api.setActive()
+  void window.api.app.setLayout(workspaceId, api.toJSON())
 }
 
 export function activeTerminalPtyId(): string | undefined {

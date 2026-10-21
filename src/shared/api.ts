@@ -4,6 +4,7 @@ import type {
   DetectedAgent,
   Provider,
   PtyCreateOptions,
+  Project,
   PtyInfo,
   Routine,
   RoutineRun,
@@ -42,6 +43,7 @@ export interface InvokeChannels {
   /** "Continue without a folder": opens the user's own folder (C:\Users\<name>). */
   'workspaces:addScratch': () => string
   'workspaces:rename': (id: string, name: string) => void
+  'workspaces:setProjects': (id: string, projects: Project[]) => void
   'workspaces:remove': (id: string) => void
   'workspaces:setAccountOverride': (id: string, provider: Provider, accountId: string | null) => void
   'workspaces:reveal': (id: string) => void
@@ -95,6 +97,8 @@ type On<C extends keyof EventChannels> = (cb: EventChannels[C]) => Unsubscribe
 /** The typed API exposed to the renderer as `window.api`. */
 export interface AgentDeckApi {
   platform: string
+  /** Windows build number (e.g. 26100), 0 elsewhere — xterm needs it to match ConPTY's line wrapping. */
+  osBuild: number
   app: {
     getSnapshot: Invoke<'app:getSnapshot'>
     getLayouts: Invoke<'app:getLayouts'>
@@ -108,6 +112,7 @@ export interface AgentDeckApi {
     add: Invoke<'workspaces:add'>
     addScratch: Invoke<'workspaces:addScratch'>
     rename: Invoke<'workspaces:rename'>
+    setProjects: Invoke<'workspaces:setProjects'>
     remove: Invoke<'workspaces:remove'>
     setAccountOverride: Invoke<'workspaces:setAccountOverride'>
     reveal: Invoke<'workspaces:reveal'>

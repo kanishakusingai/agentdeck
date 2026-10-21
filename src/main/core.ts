@@ -10,6 +10,7 @@ import {
   SYSTEM_ACCOUNT_ID,
   type Account,
   type DetectedAgent,
+  type Project,
   type Provider,
   type PtyCreateOptions,
   type PtyInfo,
@@ -126,6 +127,16 @@ export class AppCore {
     const clean = name.trim()
     if (!clean) return
     this.store.update('workspaces', (list) => list.map((w) => (w.id === id ? { ...w, name: clean } : w)))
+    this.broadcast()
+  }
+
+  /** Save a workspace's projects (names trimmed and capped; unnamed or duplicate ids dropped). */
+  setProjects(id: string, projects: Project[]): void {
+    const seen = new Set<string>()
+    const clean = (Array.isArray(projects) ? projects : [])
+      .map((p) => ({ id: String(p?.id ?? ''), name: String(p?.name ?? '').trim().slice(0, 60) }))
+      .filter((p) => p.id && p.name && !seen.has(p.id) && Boolean(seen.add(p.id)))
+    this.store.update('workspaces', (list) => list.map((w) => (w.id === id ? { ...w, projects: clean } : w)))
     this.broadcast()
   }
 

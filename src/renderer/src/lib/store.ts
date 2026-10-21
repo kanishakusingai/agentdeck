@@ -6,6 +6,8 @@ export type PanelKind = 'terminal' | 'browser' | 'thread'
 
 export interface PanelSummary {
   id: string
+  /** The project this pane is filed under (none = loose in the workspace). */
+  projectId?: string
   kind: PanelKind
   title: string
   ptyId?: string

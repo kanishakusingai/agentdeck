@@ -8,7 +8,8 @@ import { arrange, openBrowserPane, openTerminal, openThreadPane, registerCanvas,
 import { cn } from '../../lib/cn'
 import { toast, useApp } from '../../lib/store'
 import { ThreadView } from '../thread/ThreadView'
-import { ActivityDot, AgentIcon, Button, IconButton } from '../ui'
+import { ActivityDot, AgentIcon, Button, ContextMenu, IconButton } from '../ui'
+import { PaneMenuItems } from './PaneMenu'
 import { BrowserView } from './BrowserView'
 import { LaunchAgentMenu } from './LaunchAgentMenu'
 import { TerminalPanel } from './TerminalPanel'
@@ -45,6 +46,10 @@ function PaneTab(props: IDockviewPanelHeaderProps) {
   }, [props.api])
   const agentId = info?.agentId ?? params.agentId
   return (
+    <ContextMenu
+      className="h-full"
+      menu={<PaneMenuItems workspaceId={params.workspaceId} panelId={props.api.id} title={title} kind={params.kind ?? 'terminal'} projectId={params.projectId} />}
+    >
     <div className="group flex h-full items-center gap-2 pr-0.5 text-xs" data-testid="pane-tab">
       {info && <ActivityDot activity={tracker.activity(info, now)} />}
       {params.kind === 'browser' ? (
@@ -67,6 +72,7 @@ function PaneTab(props: IDockviewPanelHeaderProps) {
         <X size={12} />
       </button>
     </div>
+    </ContextMenu>
   )
 }
 

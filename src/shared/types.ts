@@ -14,6 +14,13 @@ export interface Workspace {
   /** Per-provider account override for agents launched in this workspace. */
   accountOverrides: Partial<Record<Provider, string>>
   createdAt: number
+  /** The user's own groups of panes inside this workspace (a pane points to one by id). */
+  projects?: Project[]
+}
+
+export interface Project {
+  id: string
+  name: string
 }
 
 export interface HeadlessSpec {

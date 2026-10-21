@@ -143,6 +143,7 @@ function registerIpc(): void {
     return core.addWorkspace(dir, 'Home')
   })
   handle('workspaces:rename', (id, name) => core.renameWorkspace(id, name))
+  handle('workspaces:setProjects', (id, projects) => core.setProjects(id, projects))
   handle('workspaces:remove', (id) => core.removeWorkspace(id))
   handle('workspaces:setAccountOverride', (id, p, a) => core.setAccountOverride(id, p, a))
   handle('workspaces:reveal', (id) => {

@@ -14,8 +14,8 @@
   --color-surface: #151518;
   --color-raised: #1b1b1f;
   --color-hover: #232328;
-  --color-line: #212126;
-  --color-line-strong: #2e2e35;
+  --color-line: #2a2a31;
+  --color-line-strong: #383840;
   --color-fg: #ededef;
   --color-fg-muted: #a1a1aa;
   --color-fg-faint: #7d7d87;
@@ -162,8 +162,8 @@ select,
   transition: border-color 120ms ease;
 }
 .dockview-theme-agentdeck .dv-groupview.dv-active-group {
-  border-color: #3b82f6b3;
-  box-shadow: 0 0 0 1px #3b82f626;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 1px #3b82f633;
 }
 .dockview-theme-agentdeck .dv-tabs-and-actions-container {
   border-bottom: 1px solid var(--color-line);
@@ -234,6 +234,29 @@ select,
     opacity: 1;
     transform: none;
   }
+}
+
+/* Confirm / name dialogs */
+@keyframes ask-pop {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -48%) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%);
+  }
+}
+@keyframes ask-fade {
+  from {
+    opacity: 0;
+  }
+}
+.ask-pop {
+  animation: ask-pop 160ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.ask-fade {
+  animation: ask-fade 160ms ease-out;
 }
 
 @keyframes pulse-dot {

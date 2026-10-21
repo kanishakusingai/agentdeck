@@ -19,6 +19,14 @@ export interface ShellLaunch {
  */
 export const psQuote = (s: string): string => `'${s.replace(/['\u2018\u2019\u201A\u201B]/g, '$&$&')}'`
 
+/**
+ * PowerShell prompt showing just the folder name ("PS Scratchpad>").
+ * A full path wraps across lines in narrow panes, and PowerShell 5's line editor
+ * (PSReadLine 2.0) loses track of a wrapped prompt when the pane is resized — typed
+ * text then lands in the middle of the path. A short prompt doesn't wrap.
+ */
+export const SHORT_PROMPT = 'function global:prompt { "PS $(Split-Path -Leaf $PWD.ProviderPath)> " }'
+
 /** POSIX shell single-quote. */
 const shQuote = (s: string): string => `'${s.replace(/'/g, `'\\''`)}'`
 
@@ -31,8 +39,8 @@ export function buildShellLaunch({ shell, command, commandArgs = [] }: ShellLaun
 
   if (shell === 'powershell' || shell === 'pwsh') {
     const file = shell === 'pwsh' ? 'pwsh.exe' : 'powershell.exe'
-    if (!command) return { file, args: ['-NoLogo'] }
-    return { file, args: ['-NoLogo', '-NoExit', '-Command', `& ${parts.map(psQuote).join(' ')}`] }
+    if (!command) return { file, args: ['-NoLogo', '-NoExit', '-Command', SHORT_PROMPT] }
+    return { file, args: ['-NoLogo', '-NoExit', '-Command', `${SHORT_PROMPT}; & ${parts.map(psQuote).join(' ')}`] }
   }
   if (shell === 'cmd') {
     // Separate argv entries: node-pty quotes paths with spaces correctly for cmd /K.
