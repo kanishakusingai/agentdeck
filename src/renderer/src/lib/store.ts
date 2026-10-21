@@ -116,8 +116,8 @@ export function rememberSidebarBrowserUrl(id: string, url: string): void {
 }
 /** Fold a project shut in the side panel (or open it again). */
 export function toggleProjectCollapsed(workspaceId: string): void {
-  const shut = ui().collapsedSessions ?? []
-  patchUi({ collapsedSessions: shut.includes(workspaceId) ? shut.filter((id) => id !== workspaceId) : [...shut, workspaceId] })
+  const shut = ui().collapsedProjects ?? []
+  patchUi({ collapsedProjects: shut.includes(workspaceId) ? shut.filter((id) => id !== workspaceId) : [...shut, workspaceId] })
 }
 
 export async function saveSettings(patch: Partial<Settings>): Promise<void> {

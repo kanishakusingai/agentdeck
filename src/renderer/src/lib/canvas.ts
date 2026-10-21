@@ -428,15 +428,20 @@ export function arrange(sessionId: string, tiles?: number): void {
   save(sessionId)
 }
 
+/** Pane kinds older versions saved that no longer exist (Thread mode's conversation panes). */
+const isGone = (kind: unknown): boolean => kind === 'thread'
+
 export async function restoreLayout(sessionId: string, api: DockviewApi, layout: unknown): Promise<void> {
   if (!layout) return
   const saved = layout as Partial<SavedSession>
   const dock = saved.v === 2 ? saved.dock : layout
-  if (saved.v === 2) setHidden(sessionId, Array.isArray(saved.hidden) ? saved.hidden : [])
+  if (saved.v === 2) setHidden(sessionId, (Array.isArray(saved.hidden) ? saved.hidden : []).filter((h) => !isGone(h.params?.kind)))
   if (dock) {
     rearranging++
     try {
       api.fromJSON(dock as Parameters<DockviewApi['fromJSON']>[0])
+      // They open as empty placeholders (so the rest of the layout survives), then go.
+      for (const p of api.panels.filter((panel) => isGone(paramsOf(panel).kind))) api.removePanel(p)
     } catch {
       api.clear()
     } finally {

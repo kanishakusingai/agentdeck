@@ -56,9 +56,9 @@ export class JsonStore {
     const base = emptyAppData()
     if (!existsSync(this.file)) return base
     try {
-      // Older versions also saved routines, their runs and a mode switch: those are dropped.
+      // Older versions also saved routines, their runs, a mode switch and folded sessions: those are dropped.
       const { routines: _routines, runs: _runs, ...raw } = JSON.parse(readFileSync(this.file, 'utf8')) as Partial<AppData> & { routines?: unknown; runs?: unknown }
-      const { mode: _mode, ...ui } = (raw.ui ?? {}) as Partial<UiState> & { mode?: unknown }
+      const { mode: _mode, collapsedSessions: _folded, ...ui } = (raw.ui ?? {}) as Partial<UiState> & { mode?: unknown; collapsedSessions?: unknown }
       return {
         ...base,
         ...raw,

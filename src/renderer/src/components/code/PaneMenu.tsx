@@ -14,7 +14,7 @@ export async function confirmClose(sessionId: string, paneId: string, title: str
     title: `Close “${title}”?`,
     body:
       kind === 'terminal'
-        ? 'The program running in this terminal stops and it leaves the project. Your files are not touched. (To only take it off the screen, use '
+        ? 'The program running in this terminal stops and it leaves the project. Your files are not touched. (To only take it off the screen, use “Remove from screen” in its ⋯ menu.)'
         : 'The pane closes. You can open it again any time.',
     confirmLabel: kind === 'terminal' ? 'Close terminal' : 'Close pane'
   })

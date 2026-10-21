@@ -27,7 +27,12 @@ function BrowserPanel(props: IDockviewPanelProps) {
   )
 }
 
-const components = { terminal: TerminalPanel, browser: BrowserPanel }
+/** Placeholder for pane kinds older versions saved (Thread mode's panes); restoreLayout removes them at once. */
+function GonePanel() {
+  return null
+}
+
+const components = { terminal: TerminalPanel, browser: BrowserPanel, thread: GonePanel }
 
 /** A pane's name in its header: status dot, the agent's icon, the name (and the account it runs on). */
 function PaneTab(props: IDockviewPanelHeaderProps) {

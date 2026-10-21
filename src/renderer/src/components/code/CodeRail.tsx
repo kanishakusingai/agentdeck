@@ -54,14 +54,14 @@ function OffScreenRow({ sessionId, pane }: { sessionId: string; pane: HiddenPane
 function SessionRow({ ws, session }: { ws: Workspace; session: Session }) {
   const panes = useApp((s) => s.panels[session.id] ?? NO_PANELS)
   const hidden = useApp((s) => s.hidden[session.id] ?? NO_HIDDEN)
-  const ptys = useApp((s) => s.ptys)
   const active = useApp((s) => {
     void s.snapshot!.ui.activeSessions
     return s.snapshot!.ui.activeWorkspaceId === ws.id && activeSessionId(ws.id) === session.id
   })
   const [over, setOver] = useState(false)
   const count = panes.length + hidden.length
-  const running = [...panes.map((p) => p.ptyId), ...hidden.map((h) => h.params.ptyId)].some((id) => id && ptys[id]?.status === 'running')
+  // Running = not exited (an agent waiting on a usage limit still counts), as on the dashboard.
+  const running = useApp((s) => [...panes.map((p) => p.ptyId), ...hidden.map((h) => h.params.ptyId)].some((id) => Boolean(id && s.ptys[id] && s.ptys[id].status !== 'exited')))
 
   const onDrop = (e: DragEvent): void => {
     setOver(false)
@@ -134,7 +134,7 @@ function SessionRow({ ws, session }: { ws: Workspace; session: Session }) {
 /** A project in the side panel: its name, and when open, its sessions. */
 function WorkspaceRow({ ws, active, onEdit }: { ws: Workspace; active: boolean; onEdit: () => void }) {
   // Open unless folded shut (the fold is remembered per project).
-  const open = useApp((s) => !s.snapshot!.ui.collapsedSessions?.includes(ws.id))
+  const open = useApp((s) => !s.snapshot!.ui.collapsedProjects?.includes(ws.id))
   const sessions = sessionsOf(ws)
   const menu = (
     <>
@@ -202,8 +202,7 @@ function WorkspaceRow({ ws, active, onEdit }: { ws: Workspace; active: boolean; 
 }
 
 function RailFooter() {
-  const ptys = useApp((s) => s.ptys)
-  const agents = Object.values(ptys).filter((p) => p.agentId && p.status !== 'exited').length
+  const agents = useApp((s) => Object.values(s.ptys).filter((p) => p.agentId && p.status !== 'exited').length)
   return (
     <div className="mx-3 flex shrink-0 items-center gap-2.5 border-t border-line py-3">
       <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-accent-solid text-[12px] font-semibold text-white">

@@ -175,8 +175,8 @@ export interface UiState {
   /** The sidebar's browser tabs, and which one is shown. */
   sidebarBrowsers?: SidebarBrowser[]
   sidebarBrowser?: string
-  /** Projects folded shut in the left rail. */
-  collapsedSessions?: string[]
+  /** Workspaces folded shut in the left rail (their ids). */
+  collapsedProjects?: string[]
   /** The session shown for each project (workspace id → session id). */
   activeSessions?: Record<string, string>
 }

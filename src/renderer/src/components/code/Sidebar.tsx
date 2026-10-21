@@ -9,6 +9,7 @@ import { cn } from '../../lib/cn'
 import { browserLabel, DEFAULT_BROWSERS, MAIN_BROWSER, maxSidebarWidth, SIDEBAR_WIDTH } from '../../lib/sidebar'
 import { closeSidebarBrowser, newSidebarBrowser, rememberSidebarBrowserUrl, setBrowserTitle, setSidebarTab, setSidebarWidth, showSidebarBrowser, shownSidebarBrowser, useApp } from '../../lib/store'
 import { ActivityDot, activityLabel, activityText, AgentIcon, Tip } from '../ui'
+import { useWindowWidth } from '../../lib/use-window-width'
 import { BrowserView } from './BrowserView'
 
 function elapsed(ms: number, now: number): string {
@@ -131,7 +132,7 @@ function ExpandButton() {
   const width = useApp((s) => s.snapshot!.ui.sidebarWidth ?? SIDEBAR_WIDTH.default)
   const railOpen = useApp((s) => s.snapshot!.ui.railOpen !== false)
   const before = useRef<number>(SIDEBAR_WIDTH.default)
-  const max = maxSidebarWidth(window.innerWidth, railOpen)
+  const max = maxSidebarWidth(useWindowWidth(), railOpen)
   const wide = width >= max - 1
   const toggle = (): void => {
     if (wide) return setSidebarWidth(before.current < max - 1 ? before.current : SIDEBAR_WIDTH.default)

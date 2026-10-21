@@ -42,7 +42,7 @@ describe('JsonStore', () => {
     const dir = tempDir()
     writeFileSync(
       join(dir, 'agentdeck-data.json'),
-      JSON.stringify({ routines: [{ id: 'r1' }], runs: [{ id: 'x' }], ui: { mode: 'agent', railOpen: false } })
+      JSON.stringify({ routines: [{ id: 'r1' }], runs: [{ id: 'x' }], ui: { mode: 'agent', collapsedSessions: ['s1'], railOpen: false } })
     )
     const data = new JsonStore(dir).snapshot()
     expect(data).not.toHaveProperty('routines')

@@ -1,18 +1,9 @@
-import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react'
+import { useRef, useState, type KeyboardEvent, type PointerEvent } from 'react'
 import { cn } from '../../lib/cn'
 import { clampSidebarWidth, maxSidebarWidth, SIDEBAR_WIDTH } from '../../lib/sidebar'
 import { setSidebarWidth, useApp } from '../../lib/store'
+import { useWindowWidth } from '../../lib/use-window-width'
 import { Sidebar } from './Sidebar'
-
-function useWindowWidth(): number {
-  const [width, setWidth] = useState(window.innerWidth)
-  useEffect(() => {
-    const onResize = (): void => setWidth(window.innerWidth)
-    window.addEventListener('resize', onResize)
-    return () => window.removeEventListener('resize', onResize)
-  }, [])
-  return width
-}
 
 /** The right sidebar with a drag handle on its left edge (double-click it to reset the size). */
 export function ResizableSidebar() {

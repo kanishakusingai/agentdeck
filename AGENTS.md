@@ -8,7 +8,7 @@ Personal desktop "agent super app" (BridgeMind-style): Electron + React + TypeSc
 - `npm run test:e2e` — end-to-end tests (Playwright for Electron; builds first)
 - `npm run dist` — build the Windows installer into `release/`
 
-Layout: `src/main` (Electron main process: PTYs, agents, accounts, routines, transcripts, store), `src/preload` (typed contextBridge API), `src/renderer` (React UI), `src/shared` (types shared across processes).
+Layout: `src/main` (Electron main process: PTYs, agents, accounts, usage limits and handoffs, transcripts, store), `src/preload` (typed contextBridge API), `src/renderer` (React UI), `src/shared` (types shared across processes).
 
 ## Agent skills
 

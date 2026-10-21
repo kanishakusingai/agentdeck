@@ -16,6 +16,6 @@
 - **Default account**: the account new agents use unless a workspace or pane overrides it.
 - **Usage limit**: the provider message saying an account is out of quota. Becomes a choice: resume later or continue on another account.
 - **Handoff summary**: a markdown file summarising a conversation, used to continue it on another account.
-- **Transcript**: an agent's own saved conversation file (Claude Code, Codex). Only read to write a handoff summary; there is no Thread view any more.
+- **Thread**: a conversation an agent saved in its own transcript files (Claude Code, Codex). Only read to write a handoff summary; there is no Thread mode or Thread view any more.
 - **Dictation**: hold-to-talk speech-to-text that runs locally and inserts text into the focused terminal or field.
 - **Enhance Prompt**: rewrites dictated text into a clear brief using the user's own agent CLI headlessly.

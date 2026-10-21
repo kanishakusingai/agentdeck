@@ -84,10 +84,9 @@ test('the whole app: workspaces, sessions, panes, layout, browser, persistence',
   await expect(page.getByText('Nothing on screen in this session')).toBeVisible()
   await shot(page, '02-workspace')
 
-  // 3. A real terminal, no message box under it: typing goes straight into the terminal
+  // 3. A real terminal: typing goes straight into it
   await newTerminal(page)
   await expect(tabs(page)).toHaveCount(1)
-  await expect(page.getByTestId('pane-composer')).toHaveCount(0)
   await page.locator('.xterm').first().click()
   await expect(page.locator('.xterm-rows').first()).toContainText('agentdeck-e2e-site-', { timeout: 15000 })
   await page.keyboard.type('echo agentdeck-$(20+3)')

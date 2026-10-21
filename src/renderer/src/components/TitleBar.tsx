@@ -1,4 +1,4 @@
-import { Bell, Loader2, Mic, PanelLeft, PanelRight } from 'lucide-react'
+import { Bell, Loader2, Mic, PanelLeft, PanelRight, Settings } from 'lucide-react'
 import { tracker, useActivityClock } from '../lib/activity'
 import { cn } from '../lib/cn'
 import { setSidebarTab, toggleRail, toggleSidebar, useApp } from '../lib/store'
@@ -81,16 +81,26 @@ export function TitleBar() {
         </IconButton>
       </div>
 
-      {hasWorkspaces && (
-        <div className="flex items-center gap-1">
-          <LayoutMenu />
-          <VoiceIndicator />
-          <Notifications />
+      <div className="flex items-center gap-1">
+        {hasWorkspaces && (
+          <>
+            <LayoutMenu />
+            <VoiceIndicator />
+            <Notifications />
+          </>
+        )}
+        {/* Settings normally sits at the bottom of the left panel; here while that panel is not shown. */}
+        {(!railOpen || !hasWorkspaces) && (
+          <IconButton label="Settings · Ctrl+," onClick={() => useApp.setState({ settingsOpen: 'agents' })} className="no-drag">
+            <Settings size={15} />
+          </IconButton>
+        )}
+        {hasWorkspaces && (
           <IconButton label={sidebarOpen ? 'Hide sidebar · Ctrl+B' : 'Show sidebar · Ctrl+B'} onClick={() => toggleSidebar()} className={cn('no-drag', sidebarOpen && 'text-fg')}>
             <PanelRight size={15} />
           </IconButton>
-        </div>
-      )}
+        )}
+      </div>
     </header>
   )
 }
