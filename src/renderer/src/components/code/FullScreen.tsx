@@ -8,7 +8,7 @@ import { PaneComposer, type PaneComposerHandle } from './PaneComposer'
 
 /**
  * Full screen: the terminal moves into a large window (about 70% of the app) over a
- * see-through blue backdrop, then goes back to its pane — the pane grid never changes.
+ * plain see-through backdrop, then goes back to its pane — the pane grid never changes.
  */
 export function FullScreenTerminal() {
   const zoomed = useApp((s) => s.zoomed)
@@ -42,9 +42,9 @@ export function FullScreenTerminal() {
 
   return (
     <div className="fullscreen-fade fixed inset-x-0 bottom-0 top-12 z-[55] flex items-center justify-center p-6" data-testid="fullscreen">
-      {/* See-through blue backdrop; clicking it goes back. */}
-      <button aria-label="Exit full screen" tabIndex={-1} onClick={close} className="absolute inset-0 cursor-default bg-[radial-gradient(ellipse_at_center,rgba(37,99,235,0.28),rgba(8,12,28,0.72))] backdrop-blur-[6px]" />
-      <div className="fullscreen-pop relative flex h-[78%] w-[72%] min-w-[640px] min-h-[420px] flex-col overflow-hidden rounded-2xl border border-accent/60 bg-panel shadow-[0_0_0_1px_rgba(59,130,246,0.25),0_40px_120px_-20px_rgba(0,0,0,0.9)]">
+      {/* Plain see-through backdrop (the app stays visible behind it); clicking it goes back. */}
+      <button aria-label="Exit full screen" tabIndex={-1} onClick={close} className="absolute inset-0 cursor-default bg-black/35" data-testid="fullscreen-backdrop" />
+      <div className="fullscreen-pop relative flex h-[78%] w-[72%] min-w-[640px] min-h-[420px] flex-col overflow-hidden rounded-2xl border border-line-strong bg-panel shadow-[0_40px_120px_-20px_rgba(0,0,0,0.85)]">
         <header className="flex h-11 shrink-0 items-center gap-2.5 border-b border-line px-3.5">
           <AgentIcon agentId={info.agentId} size={15} />
           <span className="truncate text-[13px] font-semibold text-fg">{info.title}</span>

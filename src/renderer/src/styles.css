@@ -300,3 +300,11 @@ select,
     transition: none !important;
   }
 }
+
+/* Scrolls sideways without showing a scrollbar (sidebar tabs). */
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}

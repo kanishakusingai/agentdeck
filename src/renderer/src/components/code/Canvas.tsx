@@ -1,16 +1,16 @@
 import { DockviewReact, themeDark, type DockviewReadyEvent, type DockviewTheme, type IDockviewHeaderActionsProps, type IDockviewPanelHeaderProps, type IDockviewPanelProps, type IWatermarkPanelProps } from 'dockview-react'
-import { Columns2, FolderOpen, Globe, Grid2x2, LayoutGrid, Maximize2, MessagesSquare, Plus, Rows2, Square, SquareTerminal, X } from 'lucide-react'
+import { ChevronDown, Columns2, FolderOpen, Globe, Grid2x2, LayoutGrid, Maximize2, MessagesSquare, Plus, Rows2, Square, SquareTerminal, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { agentById } from '@shared/agents'
 import { MAX_PANES_PER_SESSION, sessionsOf } from '@shared/types'
 import { accountName } from '../../lib/accounts'
 import { tracker, useActivityClock } from '../../lib/activity'
-import { activeSessionId, arrange, hidePanel, openBrowserPane, openTerminal, openThreadPane, registerCanvas, restoreLayout, sessionOfApi, showSession, toggleZoom, type PanelParams } from '../../lib/canvas'
+import { activeSessionId, arrange, hidePanel, openTerminal, openThreadPane, registerCanvas, restoreLayout, sessionOfApi, showSession, toggleZoom, type PanelParams } from '../../lib/canvas'
 import { cn } from '../../lib/cn'
 import { newSession } from '../../lib/sessions'
 import { toast, useApp } from '../../lib/store'
 import { ThreadView } from '../thread/ThreadView'
-import { ActivityDot, AgentIcon, Button, ContextMenu, IconButton, Tip } from '../ui'
+import { ActivityDot, AgentIcon, ContextMenu, IconButton, Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger, Tip } from '../ui'
 import { BrowserView } from './BrowserView'
 import { LaunchAgentMenu } from './LaunchAgentMenu'
 import { PaneMenuItems } from './PaneMenu'
@@ -126,15 +126,10 @@ function makeWatermark(workspaceId: string, sessionId: string) {
           <div className="mt-1.5 max-w-sm text-sm leading-relaxed text-fg-muted">
             {hidden > 0
               ? `${hidden} pane${hidden === 1 ? ' is' : 's are'} still running — click one in the side panel to bring it back, or start something new.`
-              : 'Launch an agent to start working in this folder, or open a plain terminal.'}
+              : 'Use Launch to open a terminal or start an agent in this folder.'}
           </div>
         </div>
-        <div className="flex gap-2">
-          <LaunchAgentMenu workspaceId={workspaceId} />
-          <Button size="sm" variant="secondary" onClick={() => void openTerminal({ workspaceId, sessionId })}>
-            <Plus size={13} /> Terminal
-          </Button>
-        </div>
+        <LaunchAgentMenu workspaceId={workspaceId} sessionId={sessionId} />
       </div>
     )
   }
@@ -203,8 +198,45 @@ function SessionTabs({ workspaceId }: { workspaceId: string }) {
   )
 }
 
+/** One small dropdown for arranging the panes (instead of four buttons in the header). */
+function LayoutMenu({ sessionId, count }: { sessionId: string; count: number }) {
+  return (
+    <Menu>
+      <MenuTrigger asChild>
+        <button
+          disabled={count === 0}
+          title={`Layout · ${count} of ${MAX_PANES_PER_SESSION} panes in this session`}
+          data-testid="layout-menu"
+          className="flex h-7 items-center gap-1.5 rounded-lg border border-line bg-panel px-2 text-xs font-medium text-fg-muted transition-colors hover:bg-hover hover:text-fg disabled:opacity-40 data-[state=open]:bg-hover data-[state=open]:text-fg"
+        >
+          <LayoutGrid size={13} />
+          <span className="tabular">
+            {count}/{MAX_PANES_PER_SESSION}
+          </span>
+          <ChevronDown size={12} className="opacity-60" />
+        </button>
+      </MenuTrigger>
+      <MenuContent align="end">
+        <MenuLabel>Arrange panes</MenuLabel>
+        <MenuItem onSelect={() => arrange(sessionId, 1)}>
+          <Square size={13} className="text-fg-muted" /> One at a time
+        </MenuItem>
+        <MenuItem onSelect={() => arrange(sessionId, 2)}>
+          <Columns2 size={13} className="text-fg-muted" /> Two side by side
+        </MenuItem>
+        <MenuItem onSelect={() => arrange(sessionId, 4)}>
+          <Grid2x2 size={13} className="text-fg-muted" /> Four in a grid
+        </MenuItem>
+        <MenuSeparator />
+        <MenuItem onSelect={() => arrange(sessionId)} hint="Ctrl+Shift+L" data-testid="tidy">
+          <LayoutGrid size={13} className="text-fg-muted" /> Tidy — all panes, equal tiles
+        </MenuItem>
+      </MenuContent>
+    </Menu>
+  )
+}
+
 export function CanvasToolbar({ workspaceId }: { workspaceId: string }) {
-  const browserHome = useApp((s) => s.snapshot!.settings.browserHomeUrl)
   const sessionId = useApp((s) => {
     void s.snapshot!.ui.activeSessions
     return activeSessionId(workspaceId)
@@ -229,30 +261,8 @@ export function CanvasToolbar({ workspaceId }: { workspaceId: string }) {
         </button>
       </div>
       <SessionTabs workspaceId={workspaceId} />
-      <div className={cn('flex items-center gap-0.5 rounded-lg border border-line bg-panel p-0.5', count === 0 && 'pointer-events-none opacity-40')}>
-        <IconButton label="Single pane" onClick={() => arrange(sessionId, 1)} className="h-6 w-6">
-          <Square size={13} />
-        </IconButton>
-        <IconButton label="Two side by side" onClick={() => arrange(sessionId, 2)} className="h-6 w-6">
-          <Columns2 size={13} />
-        </IconButton>
-        <IconButton label="Four in a grid" onClick={() => arrange(sessionId, 4)} className="h-6 w-6">
-          <Grid2x2 size={13} />
-        </IconButton>
-        <IconButton label="Tidy — one tile per pane · Ctrl+Shift+L" onClick={() => arrange(sessionId)} className="h-6 w-6" data-testid="tidy">
-          <LayoutGrid size={13} />
-        </IconButton>
-      </div>
-      <span className="tabular hidden text-2xs text-fg-faint xl:inline" title={`A session shows up to ${MAX_PANES_PER_SESSION} panes`}>
-        {count}/{MAX_PANES_PER_SESSION}
-      </span>
-      <Button size="sm" variant="secondary" onClick={() => void openBrowserPane(workspaceId, browserHome)}>
-        <Globe size={13} /> Browser
-      </Button>
-      <Button size="sm" variant="secondary" onClick={() => void openTerminal({ workspaceId, sessionId })} data-testid="new-terminal">
-        <SquareTerminal size={13} /> Terminal
-      </Button>
-      <LaunchAgentMenu workspaceId={workspaceId} />
+      <LayoutMenu sessionId={sessionId} count={count} />
+      <LaunchAgentMenu workspaceId={workspaceId} sessionId={sessionId} />
     </div>
   )
 }

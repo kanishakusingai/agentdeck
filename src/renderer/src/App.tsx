@@ -4,7 +4,7 @@ import type { Mode } from '@shared/types'
 import { AgentMain, RoutineRail } from './components/agent/AgentMode'
 import { Canvas, CanvasToolbar } from './components/code/Canvas'
 import { addWorkspace, CodeRail } from './components/code/CodeRail'
-import { Sidebar } from './components/code/Sidebar'
+import { ResizableSidebar } from './components/code/Sidebar'
 import { Welcome } from './components/code/Welcome'
 import { AskHost } from './components/Ask'
 import { SettingsDialog } from './components/SettingsDialog'
@@ -149,11 +149,7 @@ export function App() {
               </div>
             )}
           </main>
-          {showSidebar && (
-            <div className="card w-[340px] shrink-0 overflow-hidden">
-              <Sidebar />
-            </div>
-          )}
+          {showSidebar && <ResizableSidebar />}
         </div>
       </div>
       <SettingsDialog />

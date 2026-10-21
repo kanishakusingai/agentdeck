@@ -34,6 +34,13 @@ const shot = (page: Page, name: string) => page.screenshot({ path: join(shots, `
 /** Visible pane tabs (other sessions' canvases stay mounted but hidden). */
 const tabs = (page: Page) => page.getByTestId('pane-tab').locator('visible=true')
 
+/** Launch › Terminal (the plain terminal is the first item of the one Launch menu). */
+async function newTerminal(page: Page): Promise<void> {
+  await page.getByTestId('launch-agent').locator('visible=true').first().click()
+  await expect(page.getByRole('menuitem').first()).toHaveText(/Terminal/)
+  await page.getByTestId('new-terminal').click()
+}
+
 /** Stop a pane for good: right-click its tab › Close › confirm. */
 async function closePane(page: Page, title: RegExp | string): Promise<void> {
   await tabs(page).filter({ hasText: title }).first().click({ button: 'right' })
@@ -67,7 +74,7 @@ test('the whole app: projects, sessions, terminals, layout, modes, persistence',
   await shot(page, '02-workspace')
 
   // 3. A real terminal: typed commands produce output; the prompt shows the full folder path
-  await page.getByTestId('new-terminal').click()
+  await newTerminal(page)
   await expect(tabs(page)).toHaveCount(1)
   await page.locator('.xterm').first().click()
   await expect(page.locator('.xterm-rows').first()).toContainText('agentdeck-e2e-site-', { timeout: 15000 })
@@ -102,9 +109,9 @@ test('the whole app: projects, sessions, terminals, layout, modes, persistence',
   await box.fill('')
 
   // 4. New panes keep every tile the same size (no Tidy needed)
-  await page.getByTestId('new-terminal').click()
-  await page.getByTestId('new-terminal').click()
-  await page.getByTestId('new-terminal').click()
+  await newTerminal(page)
+  await newTerminal(page)
+  await newTerminal(page)
   await expect(tabs(page)).toHaveCount(4)
   await page.waitForTimeout(500)
   const rects = () =>
@@ -172,6 +179,16 @@ test('the whole app: projects, sessions, terminals, layout, modes, persistence',
   await expect(page.getByTestId('ask-dialog')).toBeHidden()
   await expect(tabs(page)).toHaveCount(4)
 
+  // Collapsing a session in the side panel hides its list; expanding brings it back
+  await page.getByTestId('session-toggle').first().click()
+  await expect(page.getByTestId('pane-row')).toHaveCount(0)
+  await page.getByTestId('session-toggle').first().click()
+  await expect(page.getByTestId('pane-row')).toHaveCount(4)
+
+  // Layout lives in one small dropdown
+  await page.getByTestId('layout-menu').click()
+  await expect(page.getByRole('menuitem', { name: /Two side by side/ })).toBeVisible()
+  await shot(page, '03h-layout-menu')
   await page.getByTestId('tidy').click()
   await expect(tabs(page)).toHaveCount(4)
   // Tidy keeps processes alive: the first terminal still shows its output
@@ -214,12 +231,32 @@ test('the whole app: projects, sessions, terminals, layout, modes, persistence',
   await closePane(page, 'Claude Code')
   await expect(page.getByTestId('dashboard-row')).toHaveCount(3)
 
-  // 8. Browser tab in the sidebar
-  await page.getByRole('tab', { name: 'Browser' }).click()
-  await expect(page.getByLabel('Address')).toHaveValue('http://localhost:3000')
+  // 8. Browser tab in the sidebar; + adds another
+  await page.getByRole('tab', { name: 'Browser', exact: true }).click()
+  await expect(page.getByLabel('Address').locator('visible=true')).toHaveValue('http://localhost:3000')
+  await page.getByTestId('sidebar-add').click()
+  await page.getByTestId('sidebar-new-browser').click()
+  await expect(page.getByTestId('sidebar-browser-tab')).toHaveCount(2)
+  await expect(page.getByRole('tab', { name: 'Browser 2' })).toHaveAttribute('aria-selected', 'true')
   await page.waitForTimeout(1200)
   await shot(page, '05-browser')
+  await page.getByRole('button', { name: 'Close Browser 2' }).click({ force: true })
+  await expect(page.getByTestId('sidebar-browser-tab')).toHaveCount(1)
   await page.getByRole('tab', { name: 'Dashboard' }).click()
+
+  // 8b. The sidebar can be dragged wider by its left edge; double-click resets it
+  const sidebarWidth = () => page.getByTestId('sidebar').evaluate((e) => Math.round(e.getBoundingClientRect().width))
+  expect(await sidebarWidth()).toBe(340)
+  const handle = (await page.getByTestId('sidebar-resizer').boundingBox())!
+  await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(handle.x - 100, handle.y + handle.height / 2, { steps: 5 })
+  await page.mouse.move(handle.x - 200, handle.y + handle.height / 2, { steps: 5 })
+  await page.mouse.up()
+  expect(Math.abs((await sidebarWidth()) - 540)).toBeLessThanOrEqual(3)
+  await shot(page, '05b-wide-sidebar')
+  await page.getByTestId('sidebar-resizer').dblclick()
+  expect(await sidebarWidth()).toBe(340)
 
   // 9. Mode switch changes rail and main area
   await page.getByRole('tab', { name: 'Thread' }).click()

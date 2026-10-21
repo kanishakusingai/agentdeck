@@ -94,6 +94,7 @@ export const setActiveSession = (workspaceId: string, sessionId: string): void =
 export const toggleSidebar = (open?: boolean): void => patchUi({ sidebarOpen: open ?? !ui().sidebarOpen })
 export const toggleRail = (open?: boolean): void => patchUi({ railOpen: open ?? !ui().railOpen })
 export const setSidebarTab = (sidebarTab: SidebarTab): void => patchUi({ sidebarTab, sidebarOpen: true })
+export const setSidebarWidth = (sidebarWidth: number): void => patchUi({ sidebarWidth: Math.round(sidebarWidth) })
 
 export async function saveSettings(patch: Partial<Settings>): Promise<void> {
   const snap = useApp.getState().snapshot

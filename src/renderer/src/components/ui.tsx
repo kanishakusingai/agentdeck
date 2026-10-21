@@ -423,16 +423,19 @@ export function MenuItem({
   onSelect,
   disabled,
   hint,
-  danger
+  danger,
+  'data-testid': testId
 }: {
   children: ReactNode
   onSelect?: () => void
   disabled?: boolean
   hint?: ReactNode
   danger?: boolean
+  'data-testid'?: string
 }) {
   return (
     <RMenu.Item
+      data-testid={testId}
       disabled={disabled}
       onSelect={onSelect}
       className={cn(menuItem, danger && 'text-err data-[highlighted]:from-[#ef4444] data-[highlighted]:to-[#dc2626]')}

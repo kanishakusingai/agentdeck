@@ -185,6 +185,8 @@ export interface UiState {
   /** Right sidebar (dashboard / browser) in Code mode. */
   sidebarOpen: boolean
   sidebarTab: SidebarTab
+  /** Width of the right sidebar in px (dragged by its left edge). */
+  sidebarWidth?: number
   /** The session shown for each project (workspace id → session id). */
   activeSessions?: Record<string, string>
 }
@@ -209,6 +211,8 @@ export const DEFAULT_SETTINGS: Settings = {
   browserHomeUrl: 'http://localhost:3000',
   fullPathPrompt: true
 }
+
+export const SIDEBAR_WIDTH = { min: 280, default: 340 }
 
 export const DEFAULT_UI: UiState = {
   mode: 'code',

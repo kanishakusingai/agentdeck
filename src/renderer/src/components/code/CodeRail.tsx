@@ -74,6 +74,8 @@ function SessionBlock({ ws, session, now, showHeader }: { ws: Workspace; session
     return s.snapshot!.ui.activeWorkspaceId === ws.id && activeSessionId(ws.id) === session.id
   })
   const [over, setOver] = useState(false)
+  const [open, setOpen] = useState(true)
+  const count = panes.length + hidden.length
 
   const onDrop = (e: DragEvent): void => {
     setOver(false)
@@ -116,11 +118,20 @@ function SessionBlock({ ws, session, now, showHeader }: { ws: Workspace; session
             </>
           }
         >
-          <div className={cn('group flex h-7 items-center rounded-md pl-4 pr-1 text-xs', active ? 'text-fg' : 'text-fg-muted hover:bg-hover/60 hover:text-fg')}>
+          <div className={cn('group flex h-7 items-center rounded-md pl-1.5 pr-1 text-xs', active ? 'text-fg' : 'text-fg-muted hover:bg-hover/60 hover:text-fg')}>
+            <button
+              aria-label={open ? `Collapse ${session.name}` : `Expand ${session.name}`}
+              aria-expanded={open}
+              onClick={() => setOpen(!open)}
+              className="flex h-6 w-5 shrink-0 items-center justify-center rounded text-fg-faint hover:text-fg"
+              data-testid="session-toggle"
+            >
+              <ChevronDown size={12} className={cn('transition-transform', !open && '-rotate-90')} />
+            </button>
             <button onClick={() => showSession(session.id)} className="flex min-w-0 flex-1 items-center gap-2 text-left" data-testid="session-name">
               <Layers size={12} className={cn('shrink-0', active ? 'text-accent-strong' : 'text-fg-faint')} />
               <span className={cn('truncate', active && 'font-semibold')}>{session.name}</span>
-              <span className="tabular text-2xs text-fg-faint">{panes.length + hidden.length}</span>
+              <span className="tabular text-2xs text-fg-faint">{count}</span>
             </button>
             <Tip label="New terminal in this session">
               <button
@@ -134,7 +145,7 @@ function SessionBlock({ ws, session, now, showHeader }: { ws: Workspace; session
           </div>
         </ContextMenu>
       )}
-      {panes.length + hidden.length === 0 ? (
+      {showHeader && !open ? null : count === 0 ? (
         <div className="py-1 pl-9 text-2xs text-fg-faint">{over ? 'Drop to move here' : 'Empty'}</div>
       ) : (
         <ul className="flex flex-col gap-px pb-0.5">
