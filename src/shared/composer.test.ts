@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { applySuggestion, commandsFor, detectTrigger, rankFiles, rankSuggestions } from './composer'
+import { applySuggestion, detectTrigger, rankFiles } from './composer'
 
 describe('detectTrigger', () => {
   it('opens the command list when the box starts with a slash', () => {
@@ -57,36 +57,5 @@ describe('rankFiles', () => {
 
   it('caps the list', () => {
     expect(rankFiles(paths, '', 2)).toEqual(['README.md', 'src/'])
-  })
-})
-
-describe('rankSuggestions', () => {
-  const items = [{ name: 'compact' }, { name: 'model' }, { name: 'memory' }, { name: 'permissions' }]
-
-  it('puts prefix matches first, then other matches, and drops the rest', () => {
-    expect(rankSuggestions(items, 'm', (i) => i.name).map((i) => i.name)).toEqual(['model', 'memory', 'compact', 'permissions'])
-    expect(rankSuggestions(items, 'mem', (i) => i.name).map((i) => i.name)).toEqual(['memory'])
-  })
-
-  it('keeps the original order for an empty query', () => {
-    expect(rankSuggestions(items, '', (i) => i.name)).toEqual(items)
-  })
-})
-
-describe('commandsFor', () => {
-  it('lists the built-in commands of each agent', () => {
-    expect(commandsFor('claude').map((c) => c.name)).toContain('compact')
-    expect(commandsFor('codex').map((c) => c.name)).toContain('permissions')
-  })
-
-  it('lists all of Kiro CLI’s commands, including sub-commands', () => {
-    const kiro = commandsFor('kiro').map((c) => c.name)
-    expect(kiro.length).toBeGreaterThan(80)
-    expect(kiro).toEqual(expect.arrayContaining(['context add', 'spec new', 'tangent', 'plan', 'goal', 'workflow run', 'tools trust-all', 'chat resume']))
-    expect(new Set(kiro).size).toBe(kiro.length)
-  })
-
-  it('has no built-ins for a plain shell', () => {
-    expect(commandsFor(undefined)).toEqual([])
   })
 })

@@ -186,7 +186,6 @@ function registerIpc(): void {
 
   handle('voice:enhance', (text) => core.enhancePrompt(String(text ?? '')))
 
-  handle('composer:commands', (workspaceId, agentId) => core.customCommands(workspaceId, agentId))
   handle('composer:files', (workspaceId) => core.workspaceFiles(workspaceId))
 }
 

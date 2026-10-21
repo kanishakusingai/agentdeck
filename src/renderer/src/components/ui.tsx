@@ -13,7 +13,7 @@ import { cn } from '../lib/cn'
 // ---------- Button ----------
 // Call-to-action style: a soft top-to-bottom gradient, a crisp 1px border, a bright
 // inner top edge and a small drop shadow, so buttons look pressable. The main action
-// is near-white on the dark app (highest contrast, no colour); the second one is graphite.
+// is blue; the second one is graphite.
 
 const button = cva(
   'inline-flex items-center justify-center gap-1.5 whitespace-nowrap font-medium tracking-[-0.005em] transition-[background,box-shadow,border-color,color,transform] duration-150 active:translate-y-px disabled:pointer-events-none disabled:opacity-45 no-drag',
@@ -21,7 +21,7 @@ const button = cva(
     variants: {
       variant: {
         primary:
-          'border border-[#e4e4e7] bg-linear-to-b from-[#fafafa] to-[#dedee2] text-[#0b0b0d] shadow-[inset_0_1px_0_#ffffff,0_1px_2px_rgba(0,0,0,0.5)] hover:from-white hover:to-[#e8e8eb] active:from-[#ececee] active:to-[#d8d8dc]',
+          'border border-[#1d4ed8] bg-linear-to-b from-[#4c8df6] to-[#2563eb] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.28),0_1px_2px_rgba(0,0,0,0.45),0_0_0_1px_rgba(37,99,235,0.15)] hover:from-[#5d9bff] hover:to-[#3071f0] active:from-[#2f6fe8] active:to-[#2563eb]',
         secondary:
           'border border-line-strong bg-linear-to-b from-[#25252a] to-[#1b1b1f] text-fg shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_1px_2px_rgba(0,0,0,0.4)] hover:border-[#4a4a54] hover:from-[#2c2c32] hover:to-[#212126] active:from-[#1f1f23] active:to-[#1b1b1f]',
         ghost: 'rounded-md text-fg-muted hover:bg-hover hover:text-fg active:translate-y-0',

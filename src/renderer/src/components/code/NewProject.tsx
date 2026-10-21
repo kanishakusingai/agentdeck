@@ -60,7 +60,7 @@ function Choice({ icon, title, body, hint, onClick, testId, primary, busy }: { i
       )}
     >
       <div className="flex w-full items-center justify-between">
-        <span className={cn('flex h-9 w-9 items-center justify-center rounded-lg', primary ? 'bg-linear-to-b from-[#fafafa] to-[#dedee2] text-[#0b0b0d] shadow-[inset_0_1px_0_#ffffff]' : 'bg-hover text-fg-muted')}>
+        <span className={cn('flex h-9 w-9 items-center justify-center rounded-lg', primary ? 'bg-linear-to-b from-[#4c8df6] to-[#2563eb] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.25)]' : 'bg-hover text-fg-muted')}>
           {busy ? <Loader2 size={18} className="animate-spin" /> : icon}
         </span>
         <ArrowRight size={16} className="text-fg-faint transition-transform group-hover:translate-x-0.5 group-hover:text-fg" />

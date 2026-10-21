@@ -1,10 +1,10 @@
-import { ArrowUp, AtSign, File, Folder, Loader2, Mic, Slash, Sparkles, Wand2 } from 'lucide-react'
+import { ArrowUp, AtSign, File, Folder, Loader2, Mic, Slash, Sparkles } from 'lucide-react'
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 import { agentById } from '@shared/agents'
-import { applySuggestion, commandsFor, detectTrigger, rankFiles, rankSuggestions, type SlashCommand, type Trigger } from '@shared/composer'
-import { asPastedMessage } from '@shared/paste'
+import { applySuggestion, detectTrigger, rankFiles, type Trigger } from '@shared/composer'
+import type { MenuItem } from '@shared/terminal-screen'
 import { cn } from '../../lib/cn'
-import { writePty } from '../../lib/pty-bus'
+import { boxChanged, pressKey, pressKeys, submit, useBoxText, useTerminalMenu } from '../../lib/live-input'
 import { errorText, toast, useApp } from '../../lib/store'
 import { registerComposer, toggleRecording, useVoice } from '../../voice/dictation'
 import { AgentIcon, IconButton, Kbd, menuSurface, Tip } from '../ui'
@@ -21,7 +21,7 @@ interface Props {
   active: boolean
 }
 
-/** Keys that drive the agent's own menus while the box is empty. */
+/** Keys that drive the agent's own menus and history while the box is empty. */
 const PASS_THROUGH: Record<string, string> = {
   ArrowUp: '\u001b[A',
   ArrowDown: '\u001b[B',
@@ -31,10 +31,10 @@ const PASS_THROUGH: Record<string, string> = {
   Tab: '\t',
   Backspace: '\u007f'
 }
+const UP = '\u001b[A'
+const DOWN = '\u001b[B'
 
-type Suggestion =
-  | { kind: 'command'; id: string; command: SlashCommand }
-  | { kind: 'file'; id: string; path: string }
+type Suggestion = { kind: 'command'; id: string; item: MenuItem } | { kind: 'file'; id: string; path: string }
 
 const MAX_HEIGHT = 168
 /** Messages sent from each pane, newest last (Alt+↑ / Alt+↓ bring them back). */
@@ -43,19 +43,22 @@ const sentHistory = new Map<string, string[]>()
 const ONE_LINE = 36
 
 /**
- * The message box under every terminal pane: type a message and press Enter,
- * "/" lists the agent's commands (built-in, custom and skills), "@" picks a
- * file from the workspace. While it's empty, arrows / Enter / Esc / Tab go
- * straight to the agent so its menus keep working.
+ * The message box under every terminal pane. It is live: what you type here appears
+ * in the terminal's own input line as you type, and what you type in the terminal
+ * appears here. "/" shows the commands the agent itself is offering in the terminal
+ * (read from its screen, so they are always its real ones), "@" picks a workspace file.
+ * While the box is empty, arrows / Enter / Tab go straight to the agent.
  */
 export const PaneComposer = forwardRef<PaneComposerHandle, Props>(function PaneComposer({ ptyId, workspaceId, agentId, active }, handle) {
-  const [text, setText] = useState('')
+  /** What's typed before the process exists (moved into the terminal once it does). */
+  const [draft, setDraft] = useState('')
+  const live = useBoxText((s) => (ptyId ? s[ptyId] : undefined))
+  const text = ptyId ? (live ?? '') : draft
   const [caret, setCaret] = useState(0)
   const [enhancing, setEnhancing] = useState(false)
   const [highlight, setHighlight] = useState(0)
   /** Trigger position the user closed with Esc (stays closed until they type elsewhere). */
   const [dismissed, setDismissed] = useState<number | null>(null)
-  const [custom, setCustom] = useState<SlashCommand[]>([])
   const [files, setFiles] = useState<string[] | null>(null)
   const ref = useRef<HTMLTextAreaElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
@@ -67,27 +70,34 @@ export const PaneComposer = forwardRef<PaneComposerHandle, Props>(function PaneC
 
   useImperativeHandle(handle, () => ({ focus: () => ref.current?.focus() }), [])
 
+  const changeText = (value: string): void => {
+    if (ptyId) boxChanged(ptyId, value)
+    else setDraft(value)
+  }
+
+  // The process now exists: hand it what was typed meanwhile.
+  useEffect(() => {
+    if (!ptyId || !draft) return
+    boxChanged(ptyId, draft)
+    setDraft('')
+  }, [ptyId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Text typed in the terminal moves the caret to the end of the box.
+  useEffect(() => {
+    if (document.activeElement !== ref.current) setCaret(text.length)
+  }, [text])
+
   // Dictation with nothing focused lands in the active pane's box.
+  const textRef = useRef(text)
+  textRef.current = text
   useEffect(() => {
     if (!active) return
     return registerComposer((t) => {
-      setText((prev) => (prev && !/\s$/.test(prev) ? `${prev} ${t}` : prev + t))
+      const prev = textRef.current
+      changeText(prev && !/\s$/.test(prev) ? `${prev} ${t}` : prev + t)
       ref.current?.focus()
     })
-  }, [active])
-
-  // The user's own commands and skills for this agent.
-  useEffect(() => {
-    if (!agentId) return setCustom([])
-    let cancelled = false
-    void window.api.composer
-      .commands(workspaceId, agentId)
-      .then((list) => !cancelled && setCustom(list))
-      .catch(() => undefined)
-    return () => {
-      cancelled = true
-    }
-  }, [workspaceId, agentId])
+  }, [active, ptyId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Grow with the content. An empty box is always one line (a long placeholder must not
   // wrap): any height change resizes the terminal above, which makes the shell redraw.
@@ -103,8 +113,8 @@ export const PaneComposer = forwardRef<PaneComposerHandle, Props>(function PaneC
   }, [text])
 
   const rawTrigger = detectTrigger(text, caret)
-  const trigger: Trigger | null =
-    rawTrigger && rawTrigger.start !== dismissed && (rawTrigger.kind === 'file' || agentId) ? rawTrigger : null
+  const trigger: Trigger | null = rawTrigger && rawTrigger.start !== dismissed ? rawTrigger : null
+  const { menu, reading } = useTerminalMenu(ptyId, trigger?.kind === 'command' ? text : null)
 
   // Load the file list when "@" is typed (re-read if it's older than 15 s).
   useEffect(() => {
@@ -116,22 +126,17 @@ export const PaneComposer = forwardRef<PaneComposerHandle, Props>(function PaneC
       .catch(() => setFiles([]))
   }, [trigger?.kind, workspaceId])
 
-  const allCommands = useMemo(() => {
-    const names = new Set(custom.map((c) => c.name))
-    return [...commandsFor(agentId).filter((c) => !names.has(c.name)), ...custom]
-  }, [agentId, custom])
-
   const suggestions: Suggestion[] = useMemo(() => {
     if (!trigger) return []
-    if (trigger.kind === 'command') {
-      // Every command is listed (the list scrolls); Kiro alone has over 80.
-      return rankSuggestions(allCommands, trigger.query, (c) => c.name).map((command) => ({ kind: 'command', id: `c:${command.name}`, command }))
-    }
+    if (trigger.kind === 'command') return (menu?.items ?? []).map((item, i) => ({ kind: 'command', id: `c:${i}:${item.name}`, item }))
     return rankFiles(files ?? [], trigger.query, 60).map((path) => ({ kind: 'file', id: `f:${path}`, path }))
-  }, [trigger?.kind, trigger?.query, allCommands, files]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [trigger?.kind, trigger?.query, menu, files]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const open = Boolean(trigger) && (suggestions.length > 0 || (trigger?.kind === 'file' && files === null))
-  const current = Math.min(highlight, Math.max(0, suggestions.length - 1))
+  const commandMenu = trigger?.kind === 'command'
+  const open = Boolean(trigger) && (suggestions.length > 0 || (commandMenu ? reading : files === null))
+  /** The agent's own highlight when it can be told from the screen. */
+  const agentHighlight = commandMenu && menu && menu.highlighted >= 0 ? menu.highlighted : -1
+  const current = agentHighlight >= 0 ? agentHighlight : Math.min(highlight, Math.max(0, suggestions.length - 1))
 
   useEffect(() => setHighlight(0), [trigger?.kind, trigger?.query])
   useEffect(() => {
@@ -139,7 +144,7 @@ export const PaneComposer = forwardRef<PaneComposerHandle, Props>(function PaneC
   }, [current, open])
 
   const setValue = (value: string, at: number): void => {
-    setText(value)
+    changeText(value)
     setCaret(at)
     requestAnimationFrame(() => {
       ref.current?.focus()
@@ -149,19 +154,18 @@ export const PaneComposer = forwardRef<PaneComposerHandle, Props>(function PaneC
 
   const sync = (): void => setCaret(ref.current?.selectionStart ?? 0)
 
-  const send = (value = text): void => {
-    const message = value.trim()
-    if (!message) return
+  const send = (): void => {
+    if (!text.trim()) return
     if (!ptyId) {
       toast('This pane is still starting — try again in a moment.', 'error')
       return
     }
-    writePty(ptyId, asPastedMessage(message))
-    setTimeout(() => writePty(ptyId, '\r'), 60)
+    const message = text.trim()
     const past = (sentHistory.get(ptyId) ?? []).filter((m) => m !== message)
     sentHistory.set(ptyId, [...past, message].slice(-50))
     historyAt.current = -1
-    setValue('', 0)
+    submit(ptyId)
+    setCaret(0)
     setDismissed(null)
   }
 
@@ -178,16 +182,24 @@ export const PaneComposer = forwardRef<PaneComposerHandle, Props>(function PaneC
     setValue(past[next], past[next].length)
   }
 
-  const choose = (s: Suggestion, run: boolean): void => {
-    if (!trigger) return
-    if (s.kind === 'command') {
-      const next = applySuggestion(text, caret, trigger, `/${s.command.name}`)
-      if (run) send(next.text)
-      else setValue(next.text, next.caret)
-      return
+  /** Run a command from the agent's menu: move its highlight there and press Enter, as you would in the terminal. */
+  const runCommand = (index: number): void => {
+    if (!ptyId || !menu) return
+    if (agentHighlight >= 0) {
+      const delta = index - agentHighlight
+      pressKeys(ptyId, [...Array<string>(Math.abs(delta)).fill(delta > 0 ? DOWN : UP), '\r'])
+    } else {
+      // The agent's highlight can't be seen: type the command, then Enter.
+      boxChanged(ptyId, menu.items[index].name)
+      pressKey(ptyId, '\r')
     }
-    const folder = s.path.endsWith('/')
-    const next = applySuggestion(text, caret, trigger, `@${s.path}`, !folder)
+    ref.current?.focus()
+  }
+
+  const chooseFile = (path: string): void => {
+    if (!trigger) return
+    const folder = path.endsWith('/')
+    const next = applySuggestion(text, caret, trigger, `@${path}`, !folder)
     setValue(next.text, next.caret)
   }
 
@@ -199,7 +211,28 @@ export const PaneComposer = forwardRef<PaneComposerHandle, Props>(function PaneC
       recall(e.key === 'ArrowUp' ? -1 : 1)
       return
     }
-    if (open && suggestions.length) {
+    // The agent's command menu: the keys work it just like in the terminal.
+    if (open && commandMenu && ptyId && suggestions.length) {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault()
+        const step = e.key === 'ArrowDown' ? 1 : -1
+        pressKey(ptyId, step === 1 ? DOWN : UP)
+        if (agentHighlight < 0) setHighlight((current + step + suggestions.length) % suggestions.length)
+        return
+      }
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault()
+        if (agentHighlight >= 0) pressKey(ptyId, '\r')
+        else runCommand(current)
+        return
+      }
+      if (e.key === 'Tab' && !e.shiftKey) {
+        e.preventDefault()
+        pressKey(ptyId, '\t')
+        return
+      }
+    }
+    if (open && !commandMenu && suggestions.length) {
       if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
         e.preventDefault()
         const step = e.key === 'ArrowDown' ? 1 : -1
@@ -208,19 +241,22 @@ export const PaneComposer = forwardRef<PaneComposerHandle, Props>(function PaneC
       }
       if ((e.key === 'Enter' && !e.shiftKey) || e.key === 'Tab') {
         e.preventDefault()
-        choose(suggestions[current], e.key === 'Enter')
+        const s = suggestions[current]
+        if (s.kind === 'file') chooseFile(s.path)
         return
       }
     }
     if (open && e.key === 'Escape') {
       e.preventDefault()
       setDismissed(trigger!.start)
+      // The agent closes its own menu too.
+      if (commandMenu && ptyId) pressKey(ptyId, '\u001b')
       return
     }
-    // Esc always reaches the agent (it interrupts a running task); the draft stays.
+    // Esc always reaches the agent (it interrupts a running task).
     if (e.key === 'Escape') {
       e.preventDefault()
-      if (ptyId) writePty(ptyId, '\u001b')
+      if (ptyId) pressKey(ptyId, '\u001b')
       return
     }
     if (e.key === 'Enter' && !e.shiftKey && text.trim()) {
@@ -232,14 +268,14 @@ export const PaneComposer = forwardRef<PaneComposerHandle, Props>(function PaneC
     if (ctrl && e.key.toLowerCase() === 'c' && ref.current?.selectionStart === ref.current?.selectionEnd) {
       e.preventDefault()
       if (text) setValue('', 0)
-      else if (ptyId) writePty(ptyId, '\u0003')
+      else if (ptyId) pressKey(ptyId, '\u0003')
       return
     }
     if (!text && ptyId && !ctrl && !e.altKey) {
       const seq = e.key === 'Tab' && e.shiftKey ? '\u001b[Z' : e.shiftKey && e.key !== 'Tab' ? undefined : PASS_THROUGH[e.key]
       if (seq) {
         e.preventDefault()
-        writePty(ptyId, seq)
+        pressKey(ptyId, seq)
       }
     }
   }
@@ -278,14 +314,14 @@ export const PaneComposer = forwardRef<PaneComposerHandle, Props>(function PaneC
         <div
           ref={listRef}
           role="listbox"
-          aria-label={trigger!.kind === 'command' ? 'Commands' : 'Files'}
-          className={cn(menuSurface, 'absolute bottom-full left-2 right-2 mb-1 max-h-[min(280px,60vh)] overflow-y-auto')}
+          aria-label={commandMenu ? 'Commands' : 'Files'}
+          className={cn(menuSurface, 'absolute bottom-full left-2 right-2 mb-1 max-h-[min(320px,60vh)] overflow-y-auto')}
           // Keep focus in the text box while clicking a suggestion.
           onMouseDown={(e) => e.preventDefault()}
         >
-          {trigger!.kind === 'file' && files === null ? (
+          {!suggestions.length ? (
             <div className="flex h-8 items-center gap-2 px-2.5 text-fg-faint">
-              <Loader2 size={13} className="animate-spin" /> Reading files…
+              <Loader2 size={13} className="animate-spin" /> {commandMenu ? 'Reading the commands from the terminal…' : 'Reading files…'}
             </div>
           ) : (
             suggestions.map((s, i) => (
@@ -294,23 +330,19 @@ export const PaneComposer = forwardRef<PaneComposerHandle, Props>(function PaneC
                 role="option"
                 aria-selected={i === current}
                 data-highlighted={i === current ? '' : undefined}
-                onMouseMove={() => i !== current && setHighlight(i)}
-                onClick={() => choose(s, false)}
+                onMouseMove={() => agentHighlight < 0 && i !== current && setHighlight(i)}
+                onClick={() => (s.kind === 'command' ? runCommand(i) : chooseFile(s.path))}
                 className={cn(
                   'flex h-8 cursor-default select-none items-center gap-2.5 rounded-lg px-2.5',
-                  i === current && 'bg-[#27272d] text-fg shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]'
+                  i === current ? 'bg-[#27272d] text-fg shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]' : 'hover:bg-white/[0.03]'
                 )}
               >
                 {s.kind === 'command' ? (
                   <>
-                    {s.command.source === 'skill' ? <Wand2 size={13} className="shrink-0 opacity-70" /> : <Slash size={13} className="shrink-0 opacity-70" />}
-                    <span className="shrink-0 font-mono text-[12.5px]">/{s.command.name}</span>
-                    <span className={cn('min-w-0 truncate text-xs', i === current ? 'text-white/75' : 'text-fg-faint')}>{s.command.description}</span>
-                    {s.command.source !== 'builtin' && (
-                      <span className={cn('ml-auto shrink-0 rounded px-1.5 text-2xs', i === current ? 'bg-white/15 text-white' : 'bg-surface text-fg-muted')}>
-                        {s.command.source === 'skill' ? 'skill' : 'custom'}
-                      </span>
-                    )}
+                    <Slash size={13} className="shrink-0 opacity-70" />
+                    <span className="shrink-0 font-mono text-[12.5px]">{s.item.name}</span>
+                    {s.item.alias && <span className="shrink-0 font-mono text-[11.5px] text-fg-faint">({s.item.alias})</span>}
+                    <span className={cn('min-w-0 truncate text-xs', i === current ? 'text-white/75' : 'text-fg-faint')}>{s.item.description}</span>
                   </>
                 ) : (
                   <>
@@ -321,9 +353,23 @@ export const PaneComposer = forwardRef<PaneComposerHandle, Props>(function PaneC
               </div>
             ))
           )}
+          {commandMenu && menu && menu.more > 0 && (
+            <div className="flex h-7 items-center px-2.5 text-xs text-fg-faint" data-testid="menu-more">
+              +{menu.more} more — keep typing to narrow it down, or press ↓ to scroll
+            </div>
+          )}
           <div className="mt-1 flex items-center gap-1 border-t border-white/[0.06] px-2 pb-0.5 pt-1.5 text-2xs text-fg-faint">
-            <Kbd>↑</Kbd>
-            <Kbd>↓</Kbd> choose · <Kbd>Enter</Kbd> {trigger!.kind === 'command' ? 'run' : 'insert'} · <Kbd>Tab</Kbd> insert · <Kbd>Esc</Kbd> close
+            {commandMenu ? (
+              <>
+                <span className="mr-1">From {agent?.label ?? 'the terminal'}</span>· <Kbd>↑</Kbd>
+                <Kbd>↓</Kbd> choose · <Kbd>Enter</Kbd> run · <Kbd>Tab</Kbd> complete · <Kbd>Esc</Kbd> close
+              </>
+            ) : (
+              <>
+                <Kbd>↑</Kbd>
+                <Kbd>↓</Kbd> choose · <Kbd>Enter</Kbd> insert · <Kbd>Esc</Kbd> close
+              </>
+            )}
           </div>
         </div>
       )}
@@ -341,7 +387,7 @@ export const PaneComposer = forwardRef<PaneComposerHandle, Props>(function PaneC
           value={text}
           spellCheck={false}
           onChange={(e) => {
-            setText(e.target.value)
+            changeText(e.target.value)
             setCaret(e.target.selectionStart)
             if (dismissed !== null && detectTrigger(e.target.value, e.target.selectionStart)?.start !== dismissed) setDismissed(null)
           }}
@@ -376,7 +422,7 @@ export const PaneComposer = forwardRef<PaneComposerHandle, Props>(function PaneC
             </span>
           )}
           <span className="hidden min-w-0 truncate pl-1 text-2xs text-fg-faint @[640px]:inline">
-            <Kbd>Enter</Kbd> send · <Kbd>Shift</Kbd>+<Kbd>Enter</Kbd> new line · <Kbd>Alt</Kbd>+<Kbd>↑</Kbd> last message · <Kbd>Esc</Kbd> to agent · hold <Kbd>{pttKey}</Kbd> to talk
+            Live with the terminal · <Kbd>Enter</Kbd> send · <Kbd>Shift</Kbd>+<Kbd>Enter</Kbd> new line · <Kbd>Alt</Kbd>+<Kbd>↑</Kbd> last message · hold <Kbd>{pttKey}</Kbd> to talk
           </span>
           <span className="flex-1" />
           <IconButton
@@ -404,7 +450,7 @@ export const PaneComposer = forwardRef<PaneComposerHandle, Props>(function PaneC
               aria-label="Send"
               onClick={() => send()}
               disabled={!text.trim()}
-              className="flex h-7 w-7 items-center justify-center rounded-lg border border-[#e4e4e7] bg-linear-to-b from-[#fafafa] to-[#dedee2] text-[#0b0b0d] shadow-[inset_0_1px_0_#ffffff,0_1px_2px_rgba(0,0,0,0.45)] transition-all hover:from-white hover:to-[#e8e8eb] active:translate-y-px disabled:border-line-strong disabled:from-hover disabled:to-hover disabled:text-fg-faint disabled:shadow-none"
+              className="flex h-7 w-7 items-center justify-center rounded-lg border border-[#1d4ed8] bg-linear-to-b from-[#4c8df6] to-[#2563eb] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.28),0_1px_2px_rgba(0,0,0,0.45)] transition-all hover:from-[#5d9bff] hover:to-[#3071f0] active:translate-y-px disabled:border-line-strong disabled:from-hover disabled:to-hover disabled:text-fg-faint disabled:shadow-none"
             >
               <ArrowUp size={14} strokeWidth={2.5} />
             </button>

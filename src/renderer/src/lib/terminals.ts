@@ -1,6 +1,7 @@
 import { FitAddon } from '@xterm/addon-fit'
 import { WebLinksAddon } from '@xterm/addon-web-links'
-import { Terminal, type ITheme } from '@xterm/xterm'
+import { Terminal, type IBufferCell, type ITheme } from '@xterm/xterm'
+import type { ScreenRow } from '@shared/terminal-screen'
 import { create as createStore } from 'zustand'
 import { subscribePty, writePty } from './pty-bus'
 import { useApp } from './store'
@@ -66,6 +67,66 @@ interface Entry extends TerminalView {
  */
 const entries = new Map<string, Entry>()
 
+type TypedListener = (ptyId: string, data: string) => void
+const typedListeners = new Set<TypedListener>()
+
+/** Called with the keys the user types straight into a terminal. */
+export function onTypedInTerminal(fn: TypedListener): () => void {
+  typedListeners.add(fn)
+  return () => typedListeners.delete(fn)
+}
+
+/** Placeholder and ghost text: dim, or drawn in a mid grey (256-colour 240–250, or an RGB grey). */
+function faint(cell: IBufferCell): boolean {
+  if (cell.isDim()) return true
+  if (cell.isFgPalette()) {
+    const c = cell.getFgColor()
+    return c >= 240 && c <= 250
+  }
+  if (cell.isFgRGB()) {
+    const c = cell.getFgColor()
+    const [r, g, b] = [(c >> 16) & 255, (c >> 8) & 255, c & 255]
+    return r === g && g === b && r >= 0x55 && r <= 0xaa
+  }
+  return false
+}
+
+/** The terminal's visible screen (the live part, not where the user has scrolled to). */
+export function screenRows(ptyId: string): { rows: ScreenRow[]; cols: number } | null {
+  const entry = entries.get(ptyId)
+  if (!entry) return null
+  const { term } = entry
+  const buffer = term.buffer.active
+  const rows: ScreenRow[] = []
+  let cell: IBufferCell | undefined
+  for (let y = 0; y < term.rows; y++) {
+    const line = buffer.getLine(buffer.baseY + y)
+    let text = ''
+    let solid = ''
+    let style = ''
+    if (line) {
+      for (let x = 0; x < term.cols; x++) {
+        cell = line.getCell(x, cell)
+        if (!cell || cell.getWidth() === 0) continue
+        const ch = cell.getChars() || ' '
+        text += ch
+        solid += faint(cell) ? ' ' : ch
+        if (!style && ch.trim()) {
+          style = `${cell.getFgColorMode()}:${cell.getFgColor()} ${cell.getBgColorMode()}:${cell.getBgColor()} ${cell.isBold() ? 'b' : ''}${cell.isInverse() ? 'i' : ''}`
+        }
+      }
+    }
+    const row = { text: text.trimEnd(), solid: solid.trimEnd(), style }
+    // A long line the terminal wrapped onto the next row is one row of the agent's screen.
+    const previous = rows[rows.length - 1]
+    if (line?.isWrapped && previous) {
+      previous.text = (previous.text.padEnd(term.cols) + row.text).trimEnd()
+      previous.solid = (previous.solid.padEnd(term.cols) + row.solid).trimEnd()
+    } else rows.push(row)
+  }
+  return { rows, cols: term.cols }
+}
+
 function create(ptyId: string): Entry {
   const term = new Terminal({
     fontFamily: "'Cascadia Code', 'Cascadia Mono', Consolas, 'JetBrains Mono', monospace",
@@ -101,7 +162,10 @@ function create(ptyId: string): Entry {
     return true
   })
 
-  const input = term.onData((d) => writePty(ptyId, d))
+  const input = term.onData((d) => {
+    writePty(ptyId, d)
+    typedListeners.forEach((fn) => fn(ptyId, d))
+  })
   // Send the size once it settles: every resize makes ConPTY redraw the screen.
   let resizeTimer: ReturnType<typeof setTimeout> | undefined
   const resize = term.onResize(({ cols, rows }) => {

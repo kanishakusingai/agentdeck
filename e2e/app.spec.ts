@@ -13,6 +13,8 @@ writeFileSync(join(workspaceDir, 'notes.md'), '# notes\n')
 // A fake "claude" first on PATH that immediately reports a usage limit.
 const fakeBin = mkdtempSync(join(tmpdir(), 'agentdeck-e2e-bin-'))
 writeFileSync(join(fakeBin, 'claude.cmd'), '@echo off\r\necho Claude usage limit reached. Your limit will reset at 3pm.\r\n')
+// A fake "kiro-cli" with a terminal UI of its own: an input line and a "/" command menu.
+writeFileSync(join(fakeBin, 'kiro-cli.cmd'), `@echo off\r\nnode "${join(root, 'e2e', 'fake-agent-tui.mjs')}" %*\r\n`)
 
 async function launch(): Promise<{ app: ElectronApplication; page: Page }> {
   const app = await electron.launch({
@@ -232,19 +234,69 @@ test('the whole app: projects, sessions, terminals, layout, modes, persistence',
   await expect(page.getByRole('button', { name: /Continue on another account/ })).toBeVisible()
   await expect(page.getByTestId('stat-needs')).toContainText('1')
   await shot(page, '04b-usage-limit')
-  // An agent pane's box lists the agent's slash commands
-  const claudeBox = page.getByRole('textbox', { name: 'Message to Claude' })
-  await claudeBox.click()
-  await claudeBox.pressSequentially('/comp')
-  await expect(page.getByRole('listbox', { name: 'Commands' })).toBeVisible()
-  await expect(page.getByRole('option', { name: /\/compact/ })).toBeVisible()
-  await shot(page, '04c-slash-commands')
-  await claudeBox.press('Escape')
-  await expect(page.getByRole('listbox', { name: 'Commands' })).toBeHidden()
-  await claudeBox.fill('')
   await page.getByRole('button', { name: 'Dismiss' }).click()
   await expect(page.getByText('Usage limit reached.', { exact: true })).toBeHidden()
   await closePane(page, 'Claude Code')
+  await expect(page.getByTestId('dashboard-row')).toHaveCount(3)
+
+  // 7c. The box is live with the agent's own input line, both ways, and "/" shows the
+  // commands the agent itself draws in the terminal (here a fake Kiro CLI with its own menu)
+  await page.getByTestId('launch').first().click()
+  await page.getByRole('menuitem', { name: /Kiro CLI/ }).click()
+  const kiroBox = page.getByRole('textbox', { name: 'Message to Kiro CLI' })
+  const kiroPane = page.locator('[data-pty-id]').filter({ has: kiroBox })
+  const kiroScreen = kiroPane.locator('.xterm-rows')
+  await expect(kiroScreen).toContainText('Fake Kiro', { timeout: 15000 })
+  // Box → terminal, as you type
+  await kiroBox.click()
+  await kiroBox.pressSequentially('hello')
+  await expect(kiroScreen).toContainText('› hello')
+  // Terminal → box
+  await kiroPane.locator('.xterm').click()
+  await page.keyboard.type(' there')
+  await expect(kiroBox).toHaveValue('hello there')
+  await kiroBox.click()
+  await kiroBox.press('Enter')
+  await expect(kiroScreen).toContainText('ran: hello there')
+  await expect(kiroBox).toHaveValue('')
+  // "/" lists what the agent shows — including a command no built-in list has
+  await kiroBox.pressSequentially('/')
+  await expect(page.getByRole('listbox', { name: 'Commands' })).toBeVisible()
+  await expect(page.getByRole('option', { name: /\/agent/ })).toBeVisible()
+  // As many as the agent shows (8 at most, fewer in a short pane), and how many more it has
+  await expect(page.getByTestId('menu-more')).toBeVisible()
+  const shown = await page.getByRole('option').count()
+  expect(shown).toBeGreaterThanOrEqual(3)
+  await expect(page.getByTestId('menu-more')).toContainText(`+${12 - shown} more`)
+  await shot(page, '04c-slash-commands')
+  // A command no built-in list has: it comes from the agent
+  await kiroBox.pressSequentially('e')
+  await expect(page.getByRole('option', { name: /\/e2e-only/ })).toBeVisible()
+  await kiroBox.press('Backspace')
+  // Typing narrows it in the terminal and in the box together
+  await kiroBox.pressSequentially('co')
+  await expect(page.getByRole('option')).toHaveCount(3)
+  // ↓ moves the agent's own highlight; Enter runs the highlighted command
+  await expect(page.getByRole('option', { name: /\/compact/ })).toHaveAttribute('aria-selected', 'true')
+  await kiroBox.press('ArrowDown')
+  await expect(page.getByRole('option', { name: /\/context/ })).toHaveAttribute('aria-selected', 'true')
+  await kiroBox.press('Enter')
+  await expect(kiroScreen).toContainText('ran: /context')
+  await expect(kiroBox).toHaveValue('')
+  // Clicking a command runs it
+  await kiroBox.pressSequentially('/')
+  await page.getByRole('option', { name: /\/copy/ }).click()
+  await expect(kiroScreen).toContainText('ran: /copy')
+  // Tab completes in the agent, and the box follows
+  await kiroBox.pressSequentially('/he')
+  await expect(page.getByRole('option')).toHaveCount(1)
+  await kiroBox.press('Tab')
+  await expect(kiroBox).toHaveValue('/help')
+  // Esc goes to the agent too (this one clears its line)
+  await kiroBox.press('Escape')
+  await expect(kiroBox).toHaveValue('')
+  await expect(page.getByRole('listbox', { name: 'Commands' })).toBeHidden()
+  await closePane(page, 'Kiro CLI')
   await expect(page.getByTestId('dashboard-row')).toHaveCount(3)
 
   // 8. Browser tab in the sidebar; + adds another

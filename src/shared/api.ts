@@ -14,7 +14,6 @@ import type {
   UiState,
   UsageLimitEvent
 } from './types'
-import type { SlashCommand } from './composer'
 
 /** What the renderer sees of the app's saved data (big collections load separately). */
 export type AppSnapshot = Omit<AppData, 'runs' | 'layouts'>
@@ -72,8 +71,6 @@ ame (null = the user cancelled). */
   'limits:resumeLater': (ptyId: string) => void
   'limits:dismiss': (ptyId: string) => void
   'voice:enhance': (text: string) => string
-  /** The user's own slash commands and skills for an agent in this workspace. */
-  'composer:commands': (workspaceId: string, agentId?: string) => SlashCommand[]
   /** Files and folders of a workspace for the @ picker (folders end with "/"). */
   'composer:files': (workspaceId: string) => string[]
 }
@@ -164,7 +161,6 @@ export interface AgentDeckApi {
     enhance: Invoke<'voice:enhance'>
   }
   composer: {
-    commands: Invoke<'composer:commands'>
     files: Invoke<'composer:files'>
   }
 }

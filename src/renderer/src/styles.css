@@ -3,12 +3,11 @@
 @import '@fontsource-variable/geist-mono';
 
 /*
-  Theme "Graphite & Ember":
-  - Graphite: neutral zinc greys (cool, never pure black) carry the whole interface.
-    Main buttons are near-white, menus and selections are lighter greys, the active
-    pane is outlined in light grey, so nothing colourful sits on screen all the time.
-  - Ember: one warm orange accent, used sparingly for small moments (the logo, switches
-    that are on, drop targets, the current step). It never fills large areas.
+  Theme:
+  - Neutral zinc greys (cool, never pure black) carry the whole interface: menus and
+    selections are lighter greys, the active pane is outlined in light grey.
+  - One blue accent: the main buttons (Launch, Send, Create), the logo, switches that
+    are on, drop targets and the current step.
   - Status colours keep their meaning: green working, amber needs you, red error.
 */
 @theme {
@@ -22,10 +21,10 @@
   --color-fg: #ededef;
   --color-fg-muted: #a1a1aa;
   --color-fg-faint: #7d7d87;
-  --color-accent: #ff7a3d;
-  --color-accent-strong: #ff9b6b;
-  --color-accent-solid: #e8590c;
-  --color-accent-soft: #ff7a3d1f;
+  --color-accent: #3b82f6;
+  --color-accent-strong: #60a5fa;
+  --color-accent-solid: #2563eb;
+  --color-accent-soft: #3b82f61f;
   --color-focus: #a1a1aa;
   --color-active: #71717a;
   --color-ok: #22c55e;
@@ -63,7 +62,7 @@ body,
 }
 
 ::selection {
-  background: rgba(255, 122, 61, 0.3);
+  background: #3b82f659;
 }
 
 input,
@@ -149,8 +148,8 @@ select,
   --dv-paneview-header-border-color: var(--color-line);
   --dv-tabs-and-actions-container-height: 34px;
   --dv-tabs-and-actions-container-font-size: 12px;
-  --dv-drag-over-background-color: #ff7a3d14;
-  --dv-drag-over-border-color: #ff7a3d99;
+  --dv-drag-over-background-color: #3b82f61f;
+  --dv-drag-over-border-color: #3b82f6;
   --dv-icon-hover-background-color: var(--color-hover);
   --dv-sash-color: transparent;
   --dv-active-sash-color: #ffffff33;

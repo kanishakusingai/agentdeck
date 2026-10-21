@@ -84,7 +84,6 @@ const api = {
     enhance: call('voice:enhance')
   },
   composer: {
-    commands: call('composer:commands'),
     files: call('composer:files')
   }
 } satisfies AgentDeckApi

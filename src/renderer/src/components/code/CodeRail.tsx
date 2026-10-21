@@ -99,7 +99,7 @@ function SessionBlock({ ws, session, now, showHeader }: { ws: Workspace; session
         if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setOver(false)
       }}
       onDrop={onDrop}
-      className={cn('rounded-lg transition-[background-color,box-shadow]', over && 'bg-accent/10 shadow-[inset_0_0_0_1px_rgba(255,122,61,0.55)]')}
+      className={cn('rounded-lg transition-[background-color,box-shadow]', over && 'bg-accent/10 shadow-[inset_0_0_0_1px_rgba(59,130,246,0.55)]')}
     >
       {showHeader && (
         <ContextMenu
