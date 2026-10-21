@@ -9,3 +9,11 @@ e2e/screenshots
 .eslintcache
 *.log*
 graphify-out/
+
+# Environment variables & secrets
+.env
+.env.*
+*.local
+*.pem
+*.key
+*.cert
